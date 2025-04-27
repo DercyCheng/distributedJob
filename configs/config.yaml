@@ -1,0 +1,33 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  context_path: /v1
+  shutdown_timeout: 30
+
+database:
+  url: localhost:3306
+  username: root
+  password: root
+  schema: distributed_job
+  max_idle: 10
+  max_conn: 50
+
+log:
+  level: info
+  filename: logs/distributed_job.log
+  max_size: 100
+  max_backups: 10
+  max_age: 30
+  compress: true
+
+auth:
+  jwt_secret: 8d7e48a2dc1d3e7f9a8b6c5d4e3f2a1b
+  jwt_expire_hours: 24
+  enable_encryption: true
+
+job:
+  http_workers: 10
+  grpc_workers: 10
+  queue_size: 100
+  max_retry: 3
+  retry_backoff: 5
