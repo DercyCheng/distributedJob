@@ -1,48 +1,125 @@
-# 安装部署
+# 安装指南
 
-本文档提供 DistributedJob 的安装和部署指南。
+<div align="center">
+  <h3>DistributedJob 安装指南</h3>
+</div>
+
+本指南提供了安装和部署 DistributedJob 的全面说明。
+
+## 目录
+
+- [系统要求](#系统要求)
+- [安装方法](#安装方法)
+  - [源码安装](#源码安装)
+  - [二进制安装](#二进制安装)
+  - [Docker 安装](#docker-安装)
+- [配置](#配置)
+- [数据库设置](#数据库设置)
+- [运行服务](#运行服务)
+- [验证](#验证)
+- [部署选项](#部署选项)
+  - [单实例部署](#单实例部署)
+  - [多实例部署](#多实例部署)
+  - [容器化部署](#容器化部署)
 
 ## 系统要求
 
-- Go 1.16 或更高版本
-- MySQL 5.7 或更高版本
-- 任意操作系统（Windows, macOS, Linux）
-- 如需使用 gRPC 任务功能，需安装相应的 gRPC 依赖
+在安装 DistributedJob 之前，请确保您的系统满足以下要求：
 
-## 安装方式
+| 组件 | 最低要求 |
+|-----------|---------------------|
+| Go | 1.16 或更高版本 |
+| MySQL | 5.7 或更高版本 |
+| 操作系统 | Windows、macOS 或 Linux |
+| 内存 | 2GB RAM（推荐） |
+| 磁盘空间 | 应用程序 200MB，外加日志和数据空间 |
+| gRPC | 需要 gRPC 任务功能 |
 
-### 方式一：从源代码编译
+## 安装方法
 
-1. 克隆或下载源代码到本地
-2. 进入项目目录
-3. 编译源代码
+### 源码安装
 
-```bash
-go build main.go
-```
+从源代码构建允许您根据需要自定义和修改应用程序。
 
-4. 将编译后生成的可执行文件（main 或 main.exe）与配置文件 config.yaml、页面文件夹 web 放在同一目录下
+1. **克隆仓库**
 
-目录结构应如下所示：
-```
-运行目录/
-├── main (或 main.exe)    # 可执行文件
-├── config.yaml           # 配置文件
-└── web/                  # 网页控制台文件
-    ├── index.html
-    ├── css/
-    └── js/
-```
+   ```bash
+   git clone https://github.com/username/distributedJob.git
+   cd distributedJob
+   ```
 
-### 方式二：使用预编译的二进制文件
+2. **构建应用程序**
 
-1. 从项目的 Release 页面下载对应操作系统的预编译二进制文件
-2. 解压到合适的目录
-3. 确保二进制文件、配置文件和 web 目录在同一目录下
+   ```bash
+   go build -o distributedJob ./cmd/server/main.go
+   ```
 
-## 配置说明
+3. **准备目录结构**
 
-在启动 DistributedJob 前，需要配置 `config.yaml` 文件。以下是配置文件的主要参数：
+   确保以下目录结构：
+   
+   ```
+   deployment-directory/
+   ├── distributedJob      # 编译好的二进制文件
+   ├── configs/
+   │   └── config.yaml     # 配置文件
+   └── web-ui/             # Web UI 文件
+   ```
+
+### 二进制安装
+
+对于快速部署，您可以下载预编译的二进制文件。
+
+1. **下载发布版本**
+
+   访问 [发布页面](https://github.com/username/distributedJob/releases) 并下载适合您操作系统的二进制文件。
+
+2. **解压归档文件**
+
+   ```bash
+   # Linux/macOS
+   tar -xzf distributedJob-v1.0.0-linux-amd64.tar.gz -C /opt/distributedJob
+   
+   # Windows
+   # 使用您喜欢的解压工具解压到 C:\distributedJob
+   ```
+
+3. **验证结构**
+
+   确保解压目录包含：
+   - 可执行文件（`distributedJob` 或 `distributedJob.exe`）
+   - 配置目录（`configs`）及 `config.yaml`
+   - Web UI 目录（`web-ui`）
+
+### Docker 安装
+
+使用 Docker 提供了跨不同平台的隔离一致环境。
+
+1. **拉取 Docker 镜像**
+
+   ```bash
+   docker pull username/distributed-job:latest
+   ```
+
+   或者使用提供的 Dockerfile 构建自己的镜像：
+
+   ```bash
+   docker build -t distributed-job:latest .
+   ```
+
+2. **准备配置**
+
+   为配置和数据库持久化创建本地目录：
+
+   ```bash
+   mkdir -p /data/distributed-job/configs
+   # 将 config.yaml 复制到此目录
+   cp config.yaml /data/distributed-job/configs/
+   ```
+
+## 配置
+
+通过编辑 `config.yaml` 文件配置 DistributedJob：
 
 ### 服务器配置
 
@@ -50,7 +127,7 @@ go build main.go
 server:
   port: 9088              # HTTP 服务端口
   contextPath: /v1        # API 基础路径
-  timeout: 10             # HTTP 请求超时时间 (秒)
+  timeout: 10             # HTTP 请求超时（秒）
 ```
 
 ### 数据库配置
@@ -70,10 +147,10 @@ database:
 ```yaml
 log:
   path: ./log             # 日志文件存储路径
-  level: INFO             # 日志级别 (DEBUG, INFO, WARN, ERROR)
-  maxSize: 100            # 单个日志文件大小上限 (MB)
-  maxBackups: 10          # 最大日志文件备份数
-  maxAge: 30              # 日志文件保存天数
+  level: INFO             # 日志级别（DEBUG、INFO、WARN、ERROR）
+  maxSize: 100            # 单个日志文件的最大大小（MB）
+  maxBackups: 10          # 日志文件备份的最大数量
+  maxAge: 30              # 日志文件保留天数
 ```
 
 ### 任务配置
@@ -90,287 +167,285 @@ job:
 
 ```yaml
 auth:
-  jwtSecret: your-secret-key    # JWT 密钥
+  jwtSecret: your-secret-key    # JWT 密钥（请更改此项！）
   jwtExpireHours: 24            # JWT 过期时间（小时）
   adminUsername: admin          # 默认管理员用户名
-  adminPassword: admin123       # 默认管理员密码
+  adminPassword: admin123       # 默认管理员密码（请更改此项！）
 ```
 
-## 数据库初始化
+## 数据库设置
 
-DistributedJob 在首次启动时会自动创建所需的数据库表。如果需要手动初始化数据库，请执行以下步骤：
+DistributedJob 在首次启动时会自动创建必要的数据库表。但是，您也可以手动初始化数据库。
 
-1. 创建数据库
+### 手动数据库初始化
 
-```sql
-CREATE DATABASE IF NOT EXISTS scheduler DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
+1. **创建数据库**
 
-2. 创建部门表
+   ```sql
+   CREATE DATABASE IF NOT EXISTS scheduler DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
 
-```sql
-CREATE TABLE IF NOT EXISTS `department` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) NOT NULL COMMENT '部门名称',
-  `description` varchar(500) DEFAULT NULL COMMENT '部门描述',
-  `parent_id` bigint(20) DEFAULT NULL COMMENT '父部门ID',
-  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态: 0-禁用, 1-启用',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_parent_id` (`parent_id`),
-  KEY `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='部门表';
-```
+2. **创建表**
 
-3. 创建用户、角色和权限表
+   按照以下顺序执行 SQL 脚本：
 
-```sql
--- 用户表
-CREATE TABLE IF NOT EXISTS `user` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `username` varchar(50) NOT NULL COMMENT '用户名',
-  `password` varchar(100) NOT NULL COMMENT '密码',
-  `real_name` varchar(50) NOT NULL COMMENT '真实姓名',
-  `email` varchar(100) DEFAULT NULL COMMENT '电子邮箱',
-  `phone` varchar(20) DEFAULT NULL COMMENT '手机号码',
-  `department_id` bigint(20) NOT NULL COMMENT '所属部门ID',
-  `role_id` bigint(20) NOT NULL COMMENT '角色ID',
-  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态: 0-禁用, 1-启用',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_username` (`username`),
-  KEY `idx_department_id` (`department_id`),
-  KEY `idx_role_id` (`role_id`),
-  KEY `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+   - [部门表](../scripts/init-db/init-department.sql)
+   - [用户/角色/权限表](../scripts/init-db/init-user.sql)
+   - [任务表](../scripts/init-db/init-task.sql)
+   - [记录表模板](../scripts/init-db/init-record.sql)
 
--- 角色表
-CREATE TABLE IF NOT EXISTS `role` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `name` varchar(50) NOT NULL COMMENT '角色名称',
-  `description` varchar(255) DEFAULT NULL COMMENT '角色描述',
-  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态: 0-禁用, 1-启用',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
+3. **初始化默认数据**
 
--- 权限表
-CREATE TABLE IF NOT EXISTS `permission` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `name` varchar(50) NOT NULL COMMENT '权限名称',
-  `code` varchar(50) NOT NULL COMMENT '权限编码',
-  `description` varchar(255) DEFAULT NULL COMMENT '权限描述',
-  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态: 0-禁用, 1-启用',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='权限表';
+   ```sql
+   -- 插入默认权限
+   INSERT INTO `permission` (`name`, `code`, `description`) VALUES 
+   ('任务查看', 'task:view', '查看任务的权限'),
+   ('任务创建', 'task:create', '创建任务的权限'),
+   ('任务更新', 'task:update', '编辑任务的权限'),
+   ('任务删除', 'task:delete', '删除任务的权限'),
+   ('记录查看', 'record:view', '查看执行记录的权限'),
+   ('部门管理', 'department:manage', '管理部门的权限'),
+   ('用户管理', 'user:manage', '管理用户的权限'),
+   ('角色管理', 'role:manage', '管理角色的权限');
 
--- 角色权限关联表
-CREATE TABLE IF NOT EXISTS `role_permission` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `role_id` bigint(20) NOT NULL COMMENT '角色ID',
-  `permission_id` bigint(20) NOT NULL COMMENT '权限ID',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_role_permission` (`role_id`, `permission_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关联表';
-```
+   -- 插入管理员角色
+   INSERT INTO `role` (`name`, `description`) VALUES 
+   ('管理员', '拥有所有权限的系统管理员');
 
-4. 创建任务表
+   -- 将管理员角色与所有权限关联
+   INSERT INTO `role_permission` (`role_id`, `permission_id`) 
+   SELECT 1, id FROM `permission`;
 
-```sql
--- 任务表
-CREATE TABLE IF NOT EXISTS `task` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) NOT NULL COMMENT '任务名称',
-  `department_id` bigint(20) NOT NULL COMMENT '所属部门ID',
-  `task_type` varchar(20) NOT NULL DEFAULT 'HTTP' COMMENT '任务类型: HTTP、GRPC',
-  `cron` varchar(100) NOT NULL COMMENT 'cron表达式',
-  `url` varchar(500) DEFAULT NULL COMMENT '调度URL',
-  `http_method` varchar(10) DEFAULT 'GET' COMMENT 'HTTP方法',
-  `body` text COMMENT '请求体',
-  `headers` text COMMENT '请求头',
-  `grpc_service` varchar(255) DEFAULT NULL COMMENT 'gRPC服务名',
-  `grpc_method` varchar(255) DEFAULT NULL COMMENT 'gRPC方法名',
-  `grpc_params` text COMMENT 'gRPC参数',
-  `retry_count` int(11) NOT NULL DEFAULT '0' COMMENT '最大重试次数',
-  `retry_interval` int(11) NOT NULL DEFAULT '0' COMMENT '重试间隔(秒)',
-  `fallback_url` varchar(500) DEFAULT NULL COMMENT '备用URL',
-  `fallback_grpc_service` varchar(255) DEFAULT NULL COMMENT '备用gRPC服务名',
-  `fallback_grpc_method` varchar(255) DEFAULT NULL COMMENT '备用gRPC方法名',
-  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态: 0-禁用, 1-启用',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `create_by` bigint(20) NOT NULL COMMENT '创建人ID',
-  `update_by` bigint(20) DEFAULT NULL COMMENT '更新人ID',
-  PRIMARY KEY (`id`),
-  KEY `idx_department_id` (`department_id`),
-  KEY `idx_status` (`status`),
-  KEY `idx_task_type` (`task_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='定时任务表';
-```
+   -- 插入默认部门
+   INSERT INTO `department` (`name`, `description`, `parent_id`) VALUES 
+   ('总部', '总部', NULL);
 
-5. 创建记录表
-
-```sql
--- 记录表 (按年月分表，以202501为例)
-CREATE TABLE IF NOT EXISTS `record_202501` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `task_id` bigint(20) NOT NULL COMMENT '任务ID',
-  `task_name` varchar(255) NOT NULL COMMENT '任务名称',
-  `task_type` varchar(20) NOT NULL DEFAULT 'HTTP' COMMENT '任务类型: HTTP、GRPC',
-  `department_id` bigint(20) NOT NULL COMMENT '所属部门ID',
-  `url` varchar(500) DEFAULT NULL COMMENT '调度URL',
-  `http_method` varchar(10) DEFAULT NULL COMMENT 'HTTP方法',
-  `body` text COMMENT '请求体',
-  `headers` text COMMENT '请求头',
-  `grpc_service` varchar(255) DEFAULT NULL COMMENT 'gRPC服务名',
-  `grpc_method` varchar(255) DEFAULT NULL COMMENT 'gRPC方法名',
-  `grpc_params` text COMMENT 'gRPC参数',
-  `response` text COMMENT '响应内容',
-  `status_code` int(11) DEFAULT NULL COMMENT 'HTTP状态码',
-  `grpc_status` int(11) DEFAULT NULL COMMENT 'gRPC状态码',
-  `success` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否成功',
-  `retry_times` int(11) NOT NULL DEFAULT '0' COMMENT '重试次数',
-  `use_fallback` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否使用了备用调用',
-  `cost_time` int(11) NOT NULL DEFAULT '0' COMMENT '耗时(毫秒)',
-  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_task_id` (`task_id`),
-  KEY `idx_department_id` (`department_id`),
-  KEY `idx_success` (`success`),
-  KEY `idx_create_time` (`create_time`),
-  KEY `idx_task_type` (`task_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务执行记录表';
-```
-
-6. 初始化权限数据
-
-```sql
--- 插入默认权限
-INSERT INTO `permission` (`name`, `code`, `description`) VALUES 
-('任务查看', 'task:view', '查看任务的权限'),
-('任务创建', 'task:create', '创建任务的权限'),
-('任务编辑', 'task:update', '编辑任务的权限'),
-('任务删除', 'task:delete', '删除任务的权限'),
-('记录查看', 'record:view', '查看执行记录的权限'),
-('部门管理', 'department:manage', '管理部门的权限'),
-('用户管理', 'user:manage', '管理用户的权限'),
-('角色管理', 'role:manage', '管理角色的权限');
-
--- 插入管理员角色
-INSERT INTO `role` (`name`, `description`) VALUES 
-('管理员', '系统管理员，拥有所有权限');
-
--- 关联管理员角色和所有权限
-INSERT INTO `role_permission` (`role_id`, `permission_id`) 
-SELECT 1, id FROM `permission`;
-
--- 插入默认部门
-INSERT INTO `department` (`name`, `description`, `parent_id`) VALUES 
-('总部', '总部', NULL);
-
--- 插入管理员用户(密码需加密存储，这里使用明文演示)
-INSERT INTO `user` (`username`, `password`, `real_name`, `department_id`, `role_id`) VALUES 
-('admin', 'admin123', '系统管理员', 1, 1);
-```
+   -- 插入管理员用户（生产环境中密码应加密）
+   INSERT INTO `user` (`username`, `password`, `real_name`, `department_id`, `role_id`) VALUES 
+   ('admin', 'admin123', '系统管理员', 1, 1);
+   ```
 
 ## 运行服务
 
-### Linux/macOS 环境
+### Linux/macOS
 
 ```bash
-cd <运行目录>
-./main
+# 导航到安装目录
+cd /opt/distributedJob
+
+# 运行服务
+./distributedJob
+
+# 作为后台服务运行
+nohup ./distributedJob > /dev/null 2>&1 &
 ```
 
-### Windows 环境
-
-双击 `main.exe` 运行程序，或在命令行中执行：
+### Windows
 
 ```cmd
-cd <运行目录>
-main.exe
+# 导航到安装目录
+cd C:\distributedJob
+
+# 运行服务
+distributedJob.exe
 ```
 
-## 验证安装
+### 使用 Systemd（Linux）
 
-服务启动后，可通过以下方式验证安装是否成功：
+在 `/etc/systemd/system/distributed-job.service` 创建服务文件：
 
-1. 访问健康检查接口：http://localhost:9088/v1/health
-   - 如果返回 HTTP 200 状态码，表示服务正常运行
+```ini
+[Unit]
+Description=DistributedJob 调度服务
+After=network.target mysql.service
 
-2. 访问网页控制台：http://localhost:9088/v1/web/
-   - 应该能够看到任务管理界面
-   - 使用默认管理员账号 `admin` 和密码 `admin123` 登录系统
+[Service]
+Type=simple
+User=distributed
+WorkingDirectory=/opt/distributedJob
+ExecStart=/opt/distributedJob/distributedJob
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
 
-## 服务部署
-
-### Docker 部署
-
-1. 创建 Dockerfile
-
-```dockerfile
-FROM golang:1.17-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go build -o main main.go
-
-FROM alpine:3.14
-WORKDIR /app
-COPY --from=builder /app/main .
-COPY config.yaml .
-COPY web/ web/
-EXPOSE 9088
-CMD ["./main"]
+[Install]
+WantedBy=multi-user.target
 ```
 
-2. 构建镜像
+启用并启动服务：
 
 ```bash
-docker build -t distributed-job:latest .
+sudo systemctl daemon-reload
+sudo systemctl enable distributed-job
+sudo systemctl start distributed-job
+
+# 检查状态
+sudo systemctl status distributed-job
 ```
 
-3. 运行容器
+### 使用 Docker
 
 ```bash
-docker run -d -p 9088:9088 --name distributed-job distributed-job:latest
+docker run -d \
+  --name distributed-job \
+  -p 9088:9088 \
+  -v /data/distributed-job/configs:/app/configs \
+  -v /data/distributed-job/log:/app/log \
+  username/distributed-job:latest
 ```
+
+## 验证
+
+启动服务后，验证其是否正常运行：
+
+1. **检查健康端点**
+
+   ```bash
+   curl http://localhost:9088/v1/health
+   ```
+
+   预期响应：
+   ```json
+   {"code":0,"message":"success","data":{"status":"up","timestamp":"2023-01-01T12:00:00Z"}}
+   ```
+
+2. **访问 Web 控制台**
+
+   打开浏览器并导航至：
+   ```
+   http://localhost:9088/v1/web/
+   ```
+
+   您应该会看到登录页面。使用默认凭据：
+   - 用户名：`admin`
+   - 密码：`admin123`
+
+3. **检查日志**
+
+   检查日志中是否有错误：
+   ```bash
+   # Linux/macOS
+   tail -f /opt/distributedJob/log/app.log
+   
+   # Windows
+   type C:\distributedJob\log\app.log
+   ```
+
+## 部署选项
+
+### 单实例部署
+
+对于较小的环境或测试，单实例部署已足够：
+
+1. **准备服务器**
+   - 安装 MySQL 5.7+
+   - 创建数据库和用户
+   - 部署 DistributedJob 二进制文件和配置
+
+2. **配置 MySQL 单实例**
+   - 优化更高的连接限制：
+     ```ini
+     max_connections = 200
+     innodb_buffer_pool_size = 1G
+     ```
+
+3. **运行服务**
+   - 按照[运行服务](#运行服务)部分所述启动 DistributedJob
 
 ### 多实例部署
 
-DistributedJob 支持多实例部署，只需确保所有实例连接到同一个 MySQL 数据库即可。通过乐观锁机制，系统会确保同一时刻同一任务只会被一个服务实例执行。
+为了高可用性和水平扩展，部署多个实例：
 
-多实例部署步骤：
+1. **共享数据库**
+   - 配置所有实例使用相同的 MySQL 数据库
+   - 确保数据库资源足够支持多个连接
 
-1. 在不同服务器上部署多个 DistributedJob 实例
-2. 配置所有实例使用相同的 MySQL 数据库
-3. 可以通过负载均衡器分发 API 请求（例如 Nginx）
+2. **负载均衡器**
+   - 在实例前设置负载均衡器（如 NGINX、HAProxy）
+   - 配置健康检查以将流量路由到健康的实例
 
-## 常见问题
+3. **配置一致性**
+   - 在实例间使用相同的配置
+   - 根据实例资源调整工作线程数量
 
-1. **数据库连接失败**
-   - 检查 config.yaml 中的数据库配置是否正确
-   - 确认 MySQL 服务是否正常运行
-   - 检查防火墙设置是否允许数据库连接
+4. **NGINX 配置示例**
 
-2. **服务无法启动**
-   - 检查端口是否被占用：`netstat -ano | findstr 9088`（Windows）或 `lsof -i:9088`（Linux/macOS）
-   - 查看日志文件了解详细错误信息
+   ```nginx
+   upstream distributed_job {
+       server instance1:9088;
+       server instance2:9088;
+       server instance3:9088;
+   }
 
-3. **任务不执行**
-   - 检查任务状态是否为"启用"
-   - 验证 cron 表达式是否正确
-   - 确认目标 URL 是否可访问（HTTP任务）或gRPC服务是否可用（gRPC任务）
-   - 检查用户是否有对应部门的任务执行权限
+   server {
+       listen 80;
+       server_name job.example.com;
 
-4. **gRPC 任务执行失败**
-   - 确认 gRPC 服务地址正确且可访问
-   - 检查 gRPC 参数格式是否正确
-   - 确认目标服务的 gRPC 方法存在且参数类型匹配
+       location / {
+           proxy_pass http://distributed_job;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+       }
+   }
+   ```
+
+### 容器化部署
+
+使用 Docker 和 Docker Compose 部署提供了灵活性和隔离性：
+
+1. **Docker Compose 配置**
+
+   创建 `docker-compose.yml` 文件：
+
+   ```yaml
+   version: '3'
+
+   services:
+     mysql:
+       image: mysql:8.0
+       restart: always
+       environment:
+         MYSQL_ROOT_PASSWORD: root_password
+         MYSQL_DATABASE: scheduler
+         MYSQL_USER: distributed_job
+         MYSQL_PASSWORD: distributed_job_password
+       volumes:
+         - mysql_data:/var/lib/mysql
+         - ./scripts/init-db:/docker-entrypoint-initdb.d
+       ports:
+         - "3306:3306"
+
+     distributed-job:
+       image: username/distributed-job:latest
+       restart: always
+       depends_on:
+         - mysql
+       ports:
+         - "9088:9088"
+       volumes:
+         - ./configs:/app/configs
+         - ./log:/app/log
+       environment:
+         - TZ=UTC
+
+   volumes:
+     mysql_data:
+   ```
+
+2. **启动服务**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **扩展服务**
+
+   ```bash
+   docker-compose up -d --scale distributed-job=3
+   ```
+
+4. **生产环境建议**
+
+   - 在生产环境中使用托管数据库服务而不是容器化 MySQL
+   - 为数据持久性配置适当的卷挂载
+   - 设置容器编排系统（如 Kubernetes）以实现高级扩展和管理
