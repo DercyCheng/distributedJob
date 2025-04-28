@@ -42,6 +42,7 @@ func NewServer(
 
 	// 添加中间件
 	router.Use(middleware.Logger())
+	router.Use(middleware.CORS()) // 添加CORS中间件
 	router.Use(gin.Recovery())
 
 	// 创建服务
@@ -87,12 +88,22 @@ func (s *Server) setupRoutes() {
 	// 服务关闭API仅限本地访问
 	base.GET("/shutdown", s.localOnly(), s.shutdown)
 
+	// 为认证相关的路径添加OPTIONS请求处理
+	base.OPTIONS("/auth/*path", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
 	// 认证API不需要JWT验证
 	authGroup := base.Group("/auth")
 	{
 		authGroup.POST("/login", s.login)
 		authGroup.POST("/refresh", s.refreshToken)
 	}
+
+	// 为其他API路径添加OPTIONS请求处理
+	base.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 
 	// 所有其他API需要JWT验证
 	auth := base.Group("")
@@ -1224,9 +1235,14 @@ func (s *Server) deleteUser(c *gin.Context) {
 		code := 5000
 
 		// 根据错误类型设置不同的状态码
-		if err.Error() == "user not found" {
-			status = http.StatusNotFound
-			code = 4004
+		if err != nil {
+			if err.Error() == "user not found" {
+				status = http.StatusNotFound
+				code = 4004
+			} else if err.Error() == "cannot delete user with tasks" {
+				status = http.StatusBadRequest
+				code = 4001
+			}
 		}
 
 		c.JSON(status, ResponseBody{

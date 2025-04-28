@@ -13,6 +13,7 @@ import (
 	"github.com/distributedJob/internal/api"
 	"github.com/distributedJob/internal/config"
 	"github.com/distributedJob/internal/job"
+	"github.com/distributedJob/internal/service"
 	"github.com/distributedJob/internal/store/mysql"
 	"github.com/distributedJob/pkg/logger"
 )
@@ -54,6 +55,16 @@ func main() {
 	repoManager, err := mysql.NewMySQLManager(cfg)
 	if err != nil {
 		logger.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// 系统初始化（添加默认管理员用户等）
+	if err := service.InitializeSystem(
+		repoManager.User(),
+		repoManager.Role(),
+		repoManager.Department(),
+		repoManager.Permission(),
+	); err != nil {
+		logger.Warnf("Failed to initialize system: %v", err)
 	}
 
 	// 初始化任务调度器

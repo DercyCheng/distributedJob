@@ -5,7 +5,7 @@ server:
   shutdown_timeout: 30
 
 database:
-  url: localhost:3306
+  url: db:3306
   username: root
   password: root
   schema: distributed_job

@@ -4,6 +4,9 @@ FROM golang:1.22 AS builder
 # 设置工作目录
 WORKDIR /app
 
+# 设置Go代理为国内源
+ENV GOPROXY=https://goproxy.cn,direct
+
 # 复制go.mod和go.sum文件
 COPY go.mod go.sum ./
 
