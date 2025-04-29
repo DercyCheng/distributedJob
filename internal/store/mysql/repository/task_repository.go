@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/distributedJob/internal/model/entity"
 	"github.com/distributedJob/pkg/logger"
@@ -259,6 +260,45 @@ func (r *TaskRepository) GetRecordStats(year, month int, taskID, departmentID *i
 		"avgCostTime":  avgCostTime,
 		"dailyStats":   dailyStats,
 	}, nil
+}
+
+// GetRecordsByTimeRange retrieves records within a specific time range
+func (r *TaskRepository) GetRecordsByTimeRange(year, month int, taskID, departmentID *int64, success *int8, page, size int, startTime, endTime time.Time) ([]*entity.Record, int64, error) {
+	// Calculate table name based on year and month
+	tableName := fmt.Sprintf("record_%04d_%02d", year, month)
+	
+	// Start building the query
+	query := r.db.Table(tableName).Where("create_time BETWEEN ? AND ?", startTime, endTime)
+	
+	// Apply filters if provided
+	if taskID != nil {
+		query = query.Where("task_id = ?", *taskID)
+	}
+	
+	if departmentID != nil {
+		query = query.Where("department_id = ?", *departmentID)
+	}
+	
+	if success != nil {
+		query = query.Where("success = ?", *success)
+	}
+	
+	// Count total records matching the criteria
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	
+	// Calculate pagination
+	offset := (page - 1) * size
+	
+	// Execute the query with pagination
+	var records []*entity.Record
+	if err := query.Order("id DESC").Offset(offset).Limit(size).Find(&records).Error; err != nil {
+		return nil, 0, err
+	}
+	
+	return records, total, nil
 }
 
 // tableExists 检查表是否存在

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"time"
 
 	"github.com/distributedJob/internal/job"
 	"github.com/distributedJob/internal/model/entity"
@@ -42,6 +43,7 @@ type TaskService interface {
 	GetRecordList(year, month int, taskID, departmentID *int64, success *int8, page, size int) ([]*entity.Record, int64, error)
 	GetRecordByID(id int64, year, month int) (*entity.Record, error)
 	GetRecordStats(year, month int, taskID, departmentID *int64) (map[string]interface{}, error)
+	GetRecordListByTimeRange(year, month int, taskID, departmentID *int64, success *int8, page, size int, startTime, endTime time.Time) ([]*entity.Record, int64, error)
 }
 
 // taskService 任务服务实现
@@ -266,6 +268,11 @@ func (s *taskService) GetRecordByID(id int64, year, month int) (*entity.Record, 
 // GetRecordStats 获取执行记录统计
 func (s *taskService) GetRecordStats(year, month int, taskID, departmentID *int64) (map[string]interface{}, error) {
 	return s.taskRepo.GetRecordStats(year, month, taskID, departmentID)
+}
+
+// GetRecordListByTimeRange gets records within a time range
+func (s *taskService) GetRecordListByTimeRange(year, month int, taskID, departmentID *int64, success *int8, page, size int, startTime, endTime time.Time) ([]*entity.Record, int64, error) {
+	return s.taskRepo.GetRecordsByTimeRange(year, month, taskID, departmentID, success, page, size, startTime, endTime)
 }
 
 // validateHTTPTask 验证HTTP任务

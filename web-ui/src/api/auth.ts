@@ -20,6 +20,10 @@ interface LoginResult {
   }
 }
 
+interface RefreshTokenResult {
+  token: string
+}
+
 export function login(data: LoginParams) {
   return http.post<any, LoginResult>('/auth/login', data)
 }
@@ -30,4 +34,13 @@ export function logout() {
 
 export function getUserInfo() {
   return http.get<any, LoginResult['user']>('/auth/userinfo')
+}
+
+/**
+ * 刷新令牌
+ * @param token 当前令牌
+ * @returns 新令牌
+ */
+export function refreshToken(token: string) {
+  return http.post<any, RefreshTokenResult>('/auth/refresh', { token })
 }

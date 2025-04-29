@@ -20,6 +20,7 @@ const (
 type AuthService interface {
 	// 用户认证
 	Login(username, password string) (string, error)
+	RefreshToken(userID int64) (string, error)
 	ValidateToken(tokenString string) (*Claims, error)
 
 	// 用户管理
@@ -119,6 +120,37 @@ func (s *authService) Login(username, password string) (string, error) {
 		},
 	}
 
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.jwtSecret)
+}
+
+// RefreshToken 刷新用户令牌
+func (s *authService) RefreshToken(userID int64) (string, error) {
+	// 查询用户
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", errors.New("user not found")
+	}
+
+	// 检查用户状态
+	if user.Status != UserStatusEnabled {
+		return "", errors.New("user is disabled")
+	}
+
+	// 生成新Token
+	claims := &Claims{
+		UserID:       user.ID,
+		Username:     user.Username,
+		DepartmentID: user.DepartmentID,
+		RoleID:       user.RoleID,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(s.tokenExpire).Unix(),
+			IssuedAt:  time.Now().Unix(),
+		},
+	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.jwtSecret)
 }

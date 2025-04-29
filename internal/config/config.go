@@ -16,6 +16,7 @@ type Config struct {
 	Log      LogConfig      `yaml:"log"`
 	Auth     AuthConfig     `yaml:"auth"`
 	Job      JobConfig      `yaml:"job"`
+	Rpc      RpcConfig      `yaml:"rpc"`
 }
 
 // ServerConfig 服务器配置
@@ -60,6 +61,14 @@ type JobConfig struct {
 	QueueSize    int `yaml:"queue_size"`
 	MaxRetry     int `yaml:"max_retry"`
 	RetryBackoff int `yaml:"retry_backoff"`
+}
+
+// RpcConfig RPC服务器配置
+type RpcConfig struct {
+	Port               int `yaml:"port"`
+	MaxConcurrentStreams int `yaml:"max_concurrent_streams"`
+	KeepAliveTime      int `yaml:"keep_alive_time"`
+	KeepAliveTimeout   int `yaml:"keep_alive_timeout"`
 }
 
 // LoadConfig 从文件加载配置

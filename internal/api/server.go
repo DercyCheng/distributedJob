@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/distributedJob/internal/api/middleware"
@@ -26,9 +27,105 @@ type Server struct {
 
 // ResponseBody API响应体
 type ResponseBody struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
+	Code       int         `json:"code"`
+	Message    string      `json:"message"`
+	Data       interface{} `json:"data"`
+	ErrorField string      `json:"errorField,omitempty"` // 用于标识哪个字段出错
+	ErrorType  string      `json:"errorType,omitempty"`  // 错误类型
+	RequestId  string      `json:"requestId,omitempty"`  // 请求ID，用于日志跟踪
+}
+
+// ApiError represents structured API error
+type ApiError struct {
+	Code       int    `json:"code"`
+	Message    string `json:"message"`
+	ErrorField string `json:"errorField,omitempty"`
+	ErrorType  string `json:"errorType,omitempty"`
+	Details    string `json:"details,omitempty"`
+}
+
+// ErrorDetails 定义错误详情常量
+var ErrorDetails = struct {
+	FieldRequired        string
+	FieldInvalidFormat   string
+	FieldInvalidValue    string
+	FieldTooLong         string
+	FieldTooShort        string
+	ResourceNotFound     string
+	ResourceAlreadyExists string
+	AuthFailed           string
+	PermissionDenied     string
+	SystemError          string
+	DatabaseError        string
+	NetworkError         string
+	ValidationError      string
+}{
+	FieldRequired:        "FIELD_REQUIRED",
+	FieldInvalidFormat:   "FIELD_INVALID_FORMAT",
+	FieldInvalidValue:    "FIELD_INVALID_VALUE",
+	FieldTooLong:         "FIELD_TOO_LONG",
+	FieldTooShort:        "FIELD_TOO_SHORT",
+	ResourceNotFound:     "RESOURCE_NOT_FOUND",
+	ResourceAlreadyExists: "RESOURCE_ALREADY_EXISTS",
+	AuthFailed:           "AUTH_FAILED",
+	PermissionDenied:     "PERMISSION_DENIED",
+	SystemError:          "SYSTEM_ERROR",
+	DatabaseError:        "DATABASE_ERROR", 
+	NetworkError:         "NETWORK_ERROR",
+	ValidationError:      "VALIDATION_ERROR",
+}
+
+// ErrorCodes defines standard API error codes
+var ErrorCodes = struct {
+	// Success
+	Success int
+
+	// Client errors (4000-4999)
+	BadRequest           int
+	Unauthorized         int
+	Forbidden            int
+	NotFound             int
+	MethodNotAllowed     int
+	Conflict             int
+	TooManyRequests      int
+	ValidationFailed     int
+	ResourceAlreadyExists int
+
+	// Server errors (5000-5999)
+	InternalServerError int
+	ServiceUnavailable  int
+	DatabaseError       int
+	ExternalServiceError int
+	
+	// Business logic errors (6000-6999)
+	TaskExecutionFailed int
+	ScheduleError       int
+	AuthenticationFailed int
+}{
+	// Success
+	Success: 0,
+
+	// Client errors
+	BadRequest:           4000,
+	Unauthorized:         4001,
+	Forbidden:            4003,
+	NotFound:             4004,
+	MethodNotAllowed:     4005,
+	Conflict:             4009,
+	TooManyRequests:      4029,
+	ValidationFailed:     4400,
+	ResourceAlreadyExists: 4409,
+
+	// Server errors
+	InternalServerError:  5000,
+	ServiceUnavailable:   5003,
+	DatabaseError:        5100,
+	ExternalServiceError: 5400,
+	
+	// Business logic errors
+	TaskExecutionFailed:  6000,
+	ScheduleError:        6100,
+	AuthenticationFailed: 6200,
 }
 
 // NewServer 创建一个新的API服务器
@@ -88,22 +185,12 @@ func (s *Server) setupRoutes() {
 	// 服务关闭API仅限本地访问
 	base.GET("/shutdown", s.localOnly(), s.shutdown)
 
-	// 为认证相关的路径添加OPTIONS请求处理
-	base.OPTIONS("/auth/*path", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
 	// 认证API不需要JWT验证
 	authGroup := base.Group("/auth")
 	{
 		authGroup.POST("/login", s.login)
 		authGroup.POST("/refresh", s.refreshToken)
 	}
-
-	// 为其他API路径添加OPTIONS请求处理
-	base.OPTIONS("/*path", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
 
 	// 所有其他API需要JWT验证
 	auth := base.Group("")
@@ -165,6 +252,23 @@ func (s *Server) setupRoutes() {
 		recordGroup.GET("/:id", s.getRecord)
 		recordGroup.GET("/stats", s.getRecordStats)
 	}
+
+	// 为所有API路径添加全局OPTIONS请求处理
+	base.OPTIONS("/*path", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	// 下面的单独OPTIONS处理可以移除，因为上面的全局处理已经包含了这些路径
+	// 但为了向后兼容性和明确性，我们保留它们
+	base.OPTIONS("/auth/login", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	base.OPTIONS("/auth/refresh", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	base.OPTIONS("/auth/userinfo", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 }
 
 // 健康检查API
@@ -198,10 +302,52 @@ func (s *Server) login(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// 详细解析验证错误信息
+		validationErrors := []map[string]string{}
+		
+		if strings.Contains(err.Error(), "username") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "username",
+				"error": "用户名不能为空",
+			})
+		}
+		
+		if strings.Contains(err.Error(), "password") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "password",
+				"error": "密码不能为空",
+			})
+		}
+		
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
-			Message: "invalid request parameters",
-			Data:    nil,
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "请求参数验证失败",
+			Data:       validationErrors,
+			ErrorType:  ErrorDetails.ValidationError,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 参数额外验证
+	if len(req.Username) < 3 {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "用户名长度不能少于3个字符",
+			ErrorField: "username",
+			ErrorType:  ErrorDetails.FieldTooShort,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	if len(req.Password) < 6 {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "密码长度不能少于6个字符",
+			ErrorField: "password",
+			ErrorType:  ErrorDetails.FieldTooShort,
+			RequestId:  c.GetString("requestId"),
 		})
 		return
 	}
@@ -209,10 +355,43 @@ func (s *Server) login(c *gin.Context) {
 	// 调用认证服务登录
 	token, err := s.authService.Login(req.Username, req.Password)
 	if err != nil {
+		errorMsg := err.Error()
+		errorType := ErrorDetails.AuthFailed
+		
+		// 根据具体错误类型提供更友好的错误消息
+		if strings.Contains(errorMsg, "not found") {
+			errorMsg = "用户不存在"
+			errorType = ErrorDetails.ResourceNotFound
+			errorField := "username"
+			c.JSON(http.StatusUnauthorized, ResponseBody{
+				Code:       ErrorCodes.Unauthorized,
+				Message:    errorMsg,
+				Data:       nil,
+				ErrorType:  errorType,
+				ErrorField: errorField,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		} else if strings.Contains(errorMsg, "password") {
+			errorMsg = "密码错误"
+			errorField := "password"
+			c.JSON(http.StatusUnauthorized, ResponseBody{
+				Code:       ErrorCodes.Unauthorized,
+				Message:    errorMsg,
+				Data:       nil,
+				ErrorType:  errorType,
+				ErrorField: errorField,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
+		
 		c.JSON(http.StatusUnauthorized, ResponseBody{
-			Code:    4003,
-			Message: err.Error(),
-			Data:    nil,
+			Code:       ErrorCodes.Unauthorized,
+			Message:    errorMsg,
+			Data:       nil,
+			ErrorType:  errorType,
+			RequestId:  c.GetString("requestId"),
 		})
 		return
 	}
@@ -221,8 +400,9 @@ func (s *Server) login(c *gin.Context) {
 	claims, _ := s.authService.ValidateToken(token)
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
-		Message: "success",
+		Code:      ErrorCodes.Success,
+		Message:   "登录成功",
+		RequestId: c.GetString("requestId"),
 		Data: map[string]interface{}{
 			"token":  token,
 			"userId": claims.UserID,
@@ -239,7 +419,7 @@ func (s *Server) refreshToken(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -250,39 +430,26 @@ func (s *Server) refreshToken(c *gin.Context) {
 	claims, err := s.authService.ValidateToken(req.Token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, ResponseBody{
-			Code:    4003,
+			Code:    ErrorCodes.Unauthorized,
 			Message: err.Error(),
 			Data:    nil,
 		})
 		return
 	}
 
-	// 生成新的Token
-	// 由于AuthService没有RefreshToken方法，我们可以使用ValidateToken获取用户信息后，
-	// 再通过Login获取新的Token
-	user, err := s.authService.GetUserByID(claims.UserID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
-			Message: "Failed to get user information",
-			Data:    nil,
-		})
-		return
-	}
-
-	// 此处简单处理，实际应该通过更安全的方式刷新Token
-	token, err := s.authService.Login(user.Username, "") // 注意：这里不能真正使用Login，应该在AuthService中添加RefreshToken方法
+	// 使用RefreshToken方法生成新的Token
+	token, err := s.authService.RefreshToken(claims.UserID)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, ResponseBody{
-			Code:    4003,
-			Message: "Failed to refresh token",
+			Code:    ErrorCodes.Unauthorized,
+			Message: err.Error(),
 			Data:    nil,
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"token": token,
@@ -299,7 +466,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	user, err := s.authService.GetUserByID(userID.(int64))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -312,7 +479,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	permissions, err := s.authService.GetPermissionList()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: "Failed to get permissions",
 			Data:    nil,
 		})
@@ -329,7 +496,7 @@ func (s *Server) getUserInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"user":        user,
@@ -360,7 +527,7 @@ func (s *Server) getTaskList(c *gin.Context) {
 	tasks, total, err := s.taskService.GetTaskList(departmentID, page, size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -368,7 +535,7 @@ func (s *Server) getTaskList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"tasks": tasks,
@@ -383,7 +550,7 @@ func (s *Server) getTask(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid task id",
 			Data:    nil,
 		})
@@ -394,7 +561,7 @@ func (s *Server) getTask(c *gin.Context) {
 	task, err := s.taskService.GetTaskByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ResponseBody{
-			Code:    4004,
+			Code:    ErrorCodes.NotFound,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -402,7 +569,7 @@ func (s *Server) getTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    task,
 	})
@@ -413,10 +580,74 @@ func (s *Server) createHTTPTask(c *gin.Context) {
 	// 解析请求参数
 	var task entity.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
+		// 详细解析验证错误信息
+		validationErrors := s.parseValidationError(err)
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
-			Message: "invalid request parameters",
-			Data:    nil,
+			Code:      ErrorCodes.ValidationFailed,
+			Message:   "任务参数验证失败",
+			Data:      validationErrors,
+			ErrorType: ErrorDetails.ValidationError,
+			RequestId: c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 进行额外的业务逻辑验证
+	if task.Name == "" {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "任务名称不能为空",
+			ErrorField: "name",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	if task.CronExpression == "" {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "CRON 表达式不能为空",
+			ErrorField: "cronExpression",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 验证 HTTP 任务特有字段
+	httpConfig, ok := task.Config.(map[string]interface{})
+	if !ok || httpConfig == nil {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "HTTP 配置信息不能为空",
+			ErrorField: "config",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	url, ok := httpConfig["url"].(string)
+	if !ok || url == "" {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "HTTP URL 不能为空",
+			ErrorField: "config.url",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 检查 URL 格式是否有效
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "URL 必须以 http:// 或 https:// 开头",
+			ErrorField: "config.url",
+			ErrorType:  ErrorDetails.FieldInvalidFormat,
+			RequestId:  c.GetString("requestId"),
 		})
 		return
 	}
@@ -424,17 +655,54 @@ func (s *Server) createHTTPTask(c *gin.Context) {
 	// 调用任务服务创建HTTP任务
 	id, err := s.taskService.CreateHTTPTask(&task)
 	if err != nil {
+		// 根据不同错误类型，提供不同的响应
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusConflict, ResponseBody{
+				Code:       ErrorCodes.ResourceAlreadyExists,
+				Message:    "任务名称已存在",
+				ErrorField: "name",
+				ErrorType:  ErrorDetails.ResourceAlreadyExists,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		} 
+		
+		if strings.Contains(err.Error(), "invalid cron") {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "CRON 表达式格式不正确",
+				ErrorField: "cronExpression",
+				ErrorType:  ErrorDetails.FieldInvalidFormat,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
+		
+		if strings.Contains(err.Error(), "department") {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "部门不存在或无效",
+				ErrorField: "departmentId",
+				ErrorType:  ErrorDetails.FieldInvalidValue,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
+
+		// 通用错误处理
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
-			Message: err.Error(),
-			Data:    nil,
+			Code:       ErrorCodes.InternalServerError,
+			Message:    "创建任务失败: " + err.Error(),
+			ErrorType:  ErrorDetails.SystemError,
+			RequestId:  c.GetString("requestId"),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
-		Message: "success",
+		Code:      ErrorCodes.Success,
+		Message:   "任务创建成功",
+		RequestId: c.GetString("requestId"),
 		Data: map[string]interface{}{
 			"id": id,
 		},
@@ -447,7 +715,7 @@ func (s *Server) createGRPCTask(c *gin.Context) {
 	var task entity.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -458,7 +726,7 @@ func (s *Server) createGRPCTask(c *gin.Context) {
 	id, err := s.taskService.CreateGRPCTask(&task)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -466,7 +734,7 @@ func (s *Server) createGRPCTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"id": id,
@@ -480,7 +748,7 @@ func (s *Server) updateHTTPTask(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid task id",
 			Data:    nil,
 		})
@@ -491,7 +759,7 @@ func (s *Server) updateHTTPTask(c *gin.Context) {
 	var task entity.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -505,14 +773,14 @@ func (s *Server) updateHTTPTask(c *gin.Context) {
 	err = s.taskService.UpdateHTTPTask(&task)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		if err == service.ErrTaskNotFound {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		} else if err == service.ErrInvalidParameters {
 			status = http.StatusBadRequest
-			code = 4000
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -524,7 +792,7 @@ func (s *Server) updateHTTPTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -536,9 +804,11 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
-			Message: "invalid task id",
-			Data:    nil,
+			Code:       ErrorCodes.BadRequest,
+			Message:    "任务ID格式不正确",
+			ErrorField: "id",
+			ErrorType:  ErrorDetails.FieldInvalidFormat,
+			RequestId:  c.GetString("requestId"),
 		})
 		return
 	}
@@ -546,10 +816,14 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 	// 解析请求参数
 	var task entity.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
+		// 详细解析验证错误信息
+		validationErrors := s.parseValidationError(err)
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
-			Message: "invalid request parameters",
-			Data:    nil,
+			Code:      ErrorCodes.ValidationFailed,
+			Message:   "任务参数验证失败",
+			Data:      validationErrors,
+			ErrorType: ErrorDetails.ValidationError,
+			RequestId: c.GetString("requestId"),
 		})
 		return
 	}
@@ -557,32 +831,118 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 	// 设置任务ID
 	task.ID = id
 
+	// 验证 gRPC 任务特有字段
+	grpcConfig, ok := task.Config.(map[string]interface{})
+	if !ok || grpcConfig == nil {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "gRPC 配置信息不能为空",
+			ErrorField: "config",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	server, ok := grpcConfig["server"].(string)
+	if !ok || server == "" {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "gRPC 服务器地址不能为空",
+			ErrorField: "config.server",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	service, ok := grpcConfig["service"].(string)
+	if !ok || service == "" {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "gRPC 服务名称不能为空",
+			ErrorField: "config.service",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	method, ok := grpcConfig["method"].(string)
+	if !ok || method == "" {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "gRPC 方法名称不能为空",
+			ErrorField: "config.method",
+			ErrorType:  ErrorDetails.FieldRequired,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
 	// 调用任务服务更新GRPC任务
 	err = s.taskService.UpdateGRPCTask(&task)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
+		errorType := ErrorDetails.SystemError
+		errorField := ""
 
 		if err == service.ErrTaskNotFound {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
+			errorType = ErrorDetails.ResourceNotFound
+			c.JSON(status, ResponseBody{
+				Code:       code,
+				Message:    "任务不存在",
+				ErrorType:  errorType,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
 		} else if err == service.ErrInvalidParameters {
 			status = http.StatusBadRequest
-			code = 4000
+			code = ErrorCodes.BadRequest
+			errorType = ErrorDetails.ValidationError
+			c.JSON(status, ResponseBody{
+				Code:       code,
+				Message:    "参数无效，请检查输入",
+				ErrorType:  errorType,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
 		}
 
+		// 根据错误消息进一步细分错误
+		errorMsg := err.Error()
+		if strings.Contains(errorMsg, "already exists") {
+			status = http.StatusConflict
+			code = ErrorCodes.ResourceAlreadyExists
+			errorType = ErrorDetails.ResourceAlreadyExists
+			errorField = "name"
+			c.JSON(status, ResponseBody{
+				Code:       code,
+				Message:    "任务名称已存在",
+				ErrorField: errorField,
+				ErrorType:  errorType,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
+
+		// 其他错误的通用处理
 		c.JSON(status, ResponseBody{
-			Code:    code,
-			Message: err.Error(),
-			Data:    nil,
+			Code:       code,
+			Message:    "更新任务失败: " + errorMsg,
+			ErrorType:  errorType,
+			RequestId:  c.GetString("requestId"),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
-		Message: "success",
-		Data:    nil,
+		Code:      ErrorCodes.Success,
+		Message:   "任务更新成功",
+		RequestId: c.GetString("requestId"),
 	})
 }
 
@@ -592,7 +952,7 @@ func (s *Server) deleteTask(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid task id",
 			Data:    nil,
 		})
@@ -603,11 +963,11 @@ func (s *Server) deleteTask(c *gin.Context) {
 	err = s.taskService.DeleteTask(id)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		if err == service.ErrTaskNotFound {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		}
 
 		c.JSON(status, ResponseBody{
@@ -619,7 +979,7 @@ func (s *Server) deleteTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -631,7 +991,7 @@ func (s *Server) updateTaskStatus(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid task id",
 			Data:    nil,
 		})
@@ -645,7 +1005,7 @@ func (s *Server) updateTaskStatus(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -656,14 +1016,14 @@ func (s *Server) updateTaskStatus(c *gin.Context) {
 	err = s.taskService.UpdateTaskStatus(id, req.Status)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		if err == service.ErrTaskNotFound {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		} else if err == service.ErrInvalidParameters {
 			status = http.StatusBadRequest
-			code = 4000
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -675,7 +1035,7 @@ func (s *Server) updateTaskStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -738,7 +1098,7 @@ func (s *Server) getRecordList(c *gin.Context) {
 	records, total, err := s.taskService.GetRecordList(year, month, taskID, departmentID, success, page, size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -746,7 +1106,7 @@ func (s *Server) getRecordList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"records": records,
@@ -761,7 +1121,7 @@ func (s *Server) getRecord(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4000,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid record id",
 			Data:    nil,
 		})
@@ -785,7 +1145,7 @@ func (s *Server) getRecord(c *gin.Context) {
 	record, err := s.taskService.GetRecordByID(id, year, month)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ResponseBody{
-			Code:    4004,
+			Code:    ErrorCodes.NotFound,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -793,7 +1153,7 @@ func (s *Server) getRecord(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    record,
 	})
@@ -836,7 +1196,7 @@ func (s *Server) getRecordStats(c *gin.Context) {
 	stats, err := s.taskService.GetRecordStats(year, month, taskID, departmentID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -844,7 +1204,7 @@ func (s *Server) getRecordStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    stats,
 	})
@@ -867,7 +1227,7 @@ func (s *Server) getDepartmentList(c *gin.Context) {
 	departments, total, err := s.authService.GetDepartmentList(page, size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -875,7 +1235,7 @@ func (s *Server) getDepartmentList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"departments": departments,
@@ -891,7 +1251,7 @@ func (s *Server) getDepartment(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid department id",
 			Data:    nil,
 		})
@@ -902,7 +1262,7 @@ func (s *Server) getDepartment(c *gin.Context) {
 	department, err := s.authService.GetDepartmentByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ResponseBody{
-			Code:    4004,
+			Code:    ErrorCodes.NotFound,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -910,7 +1270,7 @@ func (s *Server) getDepartment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    department,
 	})
@@ -921,7 +1281,7 @@ func (s *Server) createDepartment(c *gin.Context) {
 	var department entity.Department
 	if err := c.ShouldBindJSON(&department); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -932,7 +1292,7 @@ func (s *Server) createDepartment(c *gin.Context) {
 	id, err := s.authService.CreateDepartment(&department)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -940,7 +1300,7 @@ func (s *Server) createDepartment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    map[string]interface{}{"id": id},
 	})
@@ -951,7 +1311,7 @@ func (s *Server) updateDepartment(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid department id",
 			Data:    nil,
 		})
@@ -962,7 +1322,7 @@ func (s *Server) updateDepartment(c *gin.Context) {
 	var department entity.Department
 	if err := c.ShouldBindJSON(&department); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -976,12 +1336,12 @@ func (s *Server) updateDepartment(c *gin.Context) {
 	err = s.authService.UpdateDepartment(&department)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "department not found" {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		}
 
 		c.JSON(status, ResponseBody{
@@ -993,7 +1353,7 @@ func (s *Server) updateDepartment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1004,7 +1364,7 @@ func (s *Server) deleteDepartment(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid department id",
 			Data:    nil,
 		})
@@ -1015,15 +1375,15 @@ func (s *Server) deleteDepartment(c *gin.Context) {
 	err = s.authService.DeleteDepartment(id)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "department not found" {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		} else if err.Error() == "cannot delete department with users" {
 			status = http.StatusBadRequest
-			code = 4001
+			code = ErrorCodes.BadRequest
 			c.JSON(status, ResponseBody{
 				Code:    code,
 				Message: err.Error(),
@@ -1041,7 +1401,7 @@ func (s *Server) deleteDepartment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1072,7 +1432,7 @@ func (s *Server) getUserList(c *gin.Context) {
 	users, total, err := s.authService.GetUserList(departmentID, page, size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -1080,7 +1440,7 @@ func (s *Server) getUserList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"users": users,
@@ -1096,7 +1456,7 @@ func (s *Server) getUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid user id",
 			Data:    nil,
 		})
@@ -1107,7 +1467,7 @@ func (s *Server) getUser(c *gin.Context) {
 	user, err := s.authService.GetUserByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ResponseBody{
-			Code:    4004,
+			Code:    ErrorCodes.NotFound,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -1115,7 +1475,7 @@ func (s *Server) getUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    user,
 	})
@@ -1126,7 +1486,7 @@ func (s *Server) createUser(c *gin.Context) {
 	var user entity.User
 	if err := c.ShouldBindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -1137,12 +1497,12 @@ func (s *Server) createUser(c *gin.Context) {
 	id, err := s.authService.CreateUser(&user)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "username already exists" {
 			status = http.StatusBadRequest
-			code = 4001
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -1154,7 +1514,7 @@ func (s *Server) createUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    map[string]interface{}{"id": id},
 	})
@@ -1165,7 +1525,7 @@ func (s *Server) updateUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid user id",
 			Data:    nil,
 		})
@@ -1176,7 +1536,7 @@ func (s *Server) updateUser(c *gin.Context) {
 	var user entity.User
 	if err := c.ShouldBindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -1190,15 +1550,15 @@ func (s *Server) updateUser(c *gin.Context) {
 	err = s.authService.UpdateUser(&user)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "user not found" {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		} else if err.Error() == "username already exists" {
 			status = http.StatusBadRequest
-			code = 4001
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -1210,7 +1570,7 @@ func (s *Server) updateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1221,7 +1581,7 @@ func (s *Server) deleteUser(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid user id",
 			Data:    nil,
 		})
@@ -1232,16 +1592,16 @@ func (s *Server) deleteUser(c *gin.Context) {
 	err = s.authService.DeleteUser(id)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err != nil {
 			if err.Error() == "user not found" {
 				status = http.StatusNotFound
-				code = 4004
+				code = ErrorCodes.NotFound
 			} else if err.Error() == "cannot delete user with tasks" {
 				status = http.StatusBadRequest
-				code = 4001
+				code = ErrorCodes.BadRequest
 			}
 		}
 
@@ -1254,7 +1614,7 @@ func (s *Server) deleteUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1266,7 +1626,7 @@ func (s *Server) updateUserPassword(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid user id",
 			Data:    nil,
 		})
@@ -1281,7 +1641,7 @@ func (s *Server) updateUserPassword(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -1292,7 +1652,7 @@ func (s *Server) updateUserPassword(c *gin.Context) {
 	user, err := s.authService.GetUserByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ResponseBody{
-			Code:    4004,
+			Code:    ErrorCodes.NotFound,
 			Message: "user not found",
 			Data:    nil,
 		})
@@ -1317,7 +1677,7 @@ func (s *Server) updateUserPassword(c *gin.Context) {
 	err = s.authService.UpdateUser(updateUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -1325,7 +1685,7 @@ func (s *Server) updateUserPassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1347,7 +1707,7 @@ func (s *Server) getRoleList(c *gin.Context) {
 	roles, total, err := s.authService.GetRoleList(page, size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -1355,7 +1715,7 @@ func (s *Server) getRoleList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data: map[string]interface{}{
 			"roles": roles,
@@ -1371,7 +1731,7 @@ func (s *Server) getRole(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid role id",
 			Data:    nil,
 		})
@@ -1382,7 +1742,7 @@ func (s *Server) getRole(c *gin.Context) {
 	role, err := s.authService.GetRoleByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ResponseBody{
-			Code:    4004,
+			Code:    ErrorCodes.NotFound,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -1401,7 +1761,7 @@ func (s *Server) getRole(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    roleData,
 	})
@@ -1418,7 +1778,7 @@ func (s *Server) createRole(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -1443,12 +1803,12 @@ func (s *Server) createRole(c *gin.Context) {
 	id, err := s.authService.CreateRole(role)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "role name already exists" {
 			status = http.StatusBadRequest
-			code = 4001
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -1460,7 +1820,7 @@ func (s *Server) createRole(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    map[string]interface{}{"id": id},
 	})
@@ -1471,7 +1831,7 @@ func (s *Server) updateRole(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid role id",
 			Data:    nil,
 		})
@@ -1488,7 +1848,7 @@ func (s *Server) updateRole(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid request parameters",
 			Data:    nil,
 		})
@@ -1514,15 +1874,15 @@ func (s *Server) updateRole(c *gin.Context) {
 	err = s.authService.UpdateRole(role)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "role not found" {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		} else if err.Error() == "role name already exists" {
 			status = http.StatusBadRequest
-			code = 4001
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -1534,7 +1894,7 @@ func (s *Server) updateRole(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1545,7 +1905,7 @@ func (s *Server) deleteRole(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    4001,
+			Code:    ErrorCodes.BadRequest,
 			Message: "invalid role id",
 			Data:    nil,
 		})
@@ -1556,15 +1916,15 @@ func (s *Server) deleteRole(c *gin.Context) {
 	err = s.authService.DeleteRole(id)
 	if err != nil {
 		status := http.StatusInternalServerError
-		code := 5000
+		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
 		if err.Error() == "role not found" {
 			status = http.StatusNotFound
-			code = 4004
+			code = ErrorCodes.NotFound
 		} else if err.Error() == "cannot delete role with users" {
 			status = http.StatusBadRequest
-			code = 4001
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -1576,7 +1936,7 @@ func (s *Server) deleteRole(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    nil,
 	})
@@ -1587,7 +1947,7 @@ func (s *Server) getPermissionList(c *gin.Context) {
 	permissions, err := s.authService.GetPermissionList()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:    5000,
+			Code:    ErrorCodes.InternalServerError,
 			Message: err.Error(),
 			Data:    nil,
 		})
@@ -1595,7 +1955,7 @@ func (s *Server) getPermissionList(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:    0,
+		Code:    ErrorCodes.Success,
 		Message: "success",
 		Data:    permissions,
 	})
@@ -1608,7 +1968,7 @@ func (s *Server) localOnly() gin.HandlerFunc {
 		// 只允许本地访问
 		if host != "localhost" && host != "127.0.0.1" && host != "0.0.0.0" {
 			c.JSON(http.StatusForbidden, ResponseBody{
-				Code:    4003,
+				Code:    ErrorCodes.Forbidden,
 				Message: "this API can only be accessed locally",
 				Data:    nil,
 			})
@@ -1617,4 +1977,32 @@ func (s *Server) localOnly() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// parseValidationError 解析验证错误并返回详细的错误信息
+func (s *Server) parseValidationError(err error) []map[string]string {
+	validationErrors := []map[string]string{}
+	errorString := err.Error()
+	
+	// 解析验证错误信息
+	// 根据字段名称检测错误类型
+	fieldNames := []string{"name", "cronExpression", "type", "description", "config", "departmentId", "status"}
+	for _, field := range fieldNames {
+		if strings.Contains(errorString, field) {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": field,
+				"error": fmt.Sprintf("%s 字段验证失败", field),
+			})
+		}
+	}
+	
+	// 如果没有找到具体字段错误，添加一个通用错误
+	if len(validationErrors) == 0 {
+		validationErrors = append(validationErrors, map[string]string{
+			"field": "unknown",
+			"error": "参数格式不正确",
+		})
+	}
+	
+	return validationErrors
 }

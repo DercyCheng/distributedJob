@@ -1,24 +1,6 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: distributed_job_app
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
-    environment:
-      - TZ=Asia/Shanghai
-    volumes:
-      - ./logs:/app/logs
-      - ./configs:/app/configs
-    restart: always
-    networks:
-      - distributed_job_network
-
   db:
     image: mysql:8.0
     container_name: distributed_job_mysql
@@ -35,6 +17,21 @@ services:
     restart: always
     networks:
       - distributed_job_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: distributed_job_backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - distributed_job_network
+    restart: always
 
 networks:
   distributed_job_network:

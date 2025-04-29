@@ -1,6 +1,10 @@
 package store
 
-import "github.com/distributedJob/internal/model/entity"
+import (
+	"time"
+
+	"github.com/distributedJob/internal/model/entity"
+)
 
 // TaskRepository 定义任务数据仓库接口
 type TaskRepository interface {
@@ -15,6 +19,7 @@ type TaskRepository interface {
 	GetRecords(year, month int, taskID, departmentID *int64, success *int8, page, size int) ([]*entity.Record, int64, error)
 	GetRecordByID(id int64, year, month int) (*entity.Record, error)
 	GetRecordStats(year, month int, taskID, departmentID *int64) (map[string]interface{}, error)
+	GetRecordsByTimeRange(year, month int, taskID, departmentID *int64, success *int8, page, size int, startTime, endTime time.Time) ([]*entity.Record, int64, error)
 }
 
 // DepartmentRepository 定义部门数据仓库接口

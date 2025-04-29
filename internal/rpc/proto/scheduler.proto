@@ -1,0 +1,42 @@
+syntax = "proto3";
+package scheduler;
+
+option go_package = "github.com/distributedJob/internal/rpc/proto;protopb";
+
+service TaskScheduler {
+  rpc ScheduleTask(ScheduleTaskRequest) returns (ScheduleTaskResponse);
+  rpc PauseTask(TaskRequest) returns (TaskResponse);
+  rpc ResumeTask(TaskRequest) returns (TaskResponse);
+  rpc GetTaskStatus(TaskRequest) returns (TaskStatusResponse);
+}
+
+message ScheduleTaskRequest {
+  string name = 1;
+  string cron_expression = 2;
+  string handler = 3;
+  bytes params = 4;
+  int32 max_retry = 5;
+}
+
+message ScheduleTaskResponse {
+  int64 task_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message TaskRequest {
+  int64 task_id = 1;
+}
+
+message TaskResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message TaskStatusResponse {
+  int64 task_id = 1;
+  int32 status = 2;
+  string last_execute_time = 3;
+  string next_execute_time = 4;
+  int32 retry_count = 5;
+}

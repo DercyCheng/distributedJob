@@ -26,6 +26,9 @@ type Task struct {
 	UpdateTime          time.Time `json:"updateTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
 	CreateBy            int64     `json:"createBy" gorm:"column:create_by;not null"`
 	UpdateBy            *int64    `json:"updateBy" gorm:"column:update_by"`
+	// Additional fields for task scheduling
+	LastExecuteTime     *time.Time `json:"lastExecuteTime" gorm:"-"`
+	NextExecuteTime     *time.Time `json:"nextExecuteTime" gorm:"-"`
 }
 
 // TableName 指定表名
