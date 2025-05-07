@@ -27,6 +27,14 @@ const (
 	TaskStatusDisabled int8 = 2
 )
 
+// TaskStatistics 任务统计信息
+type TaskStatistics struct {
+	TaskCount        int                // 任务总数
+	SuccessRate      float64            // 任务成功率
+	AvgExecutionTime float64            // 平均执行时间(毫秒)
+	ExecutionStats   map[string]float64 // 执行统计，可包含不同类型任务的统计数据
+}
+
 // TaskService 任务服务接口
 type TaskService interface {
 	// 任务相关
@@ -44,6 +52,10 @@ type TaskService interface {
 	GetRecordByID(id int64, year, month int) (*entity.Record, error)
 	GetRecordStats(year, month int, taskID, departmentID *int64) (map[string]interface{}, error)
 	GetRecordListByTimeRange(year, month int, taskID, departmentID *int64, success *int8, page, size int, startTime, endTime time.Time) ([]*entity.Record, int64, error)
+
+	// 为RPC服务添加的方法
+	GetTaskRecords(taskID int64, startTime, endTime time.Time, limit, offset int) ([]*entity.Record, int64, error)
+	GetTaskStatistics(departmentID int64, startTime, endTime time.Time) (*TaskStatistics, error)
 }
 
 // taskService 任务服务实现
@@ -273,6 +285,162 @@ func (s *taskService) GetRecordStats(year, month int, taskID, departmentID *int6
 // GetRecordListByTimeRange gets records within a time range
 func (s *taskService) GetRecordListByTimeRange(year, month int, taskID, departmentID *int64, success *int8, page, size int, startTime, endTime time.Time) ([]*entity.Record, int64, error) {
 	return s.taskRepo.GetRecordsByTimeRange(year, month, taskID, departmentID, success, page, size, startTime, endTime)
+}
+
+// GetTaskRecords gets task execution records by time range for the gRPC service
+func (s *taskService) GetTaskRecords(taskID int64, startTime, endTime time.Time, limit, offset int) ([]*entity.Record, int64, error) {
+	// Determine the year and month for partitioning
+	currentYear := time.Now().Year()
+	currentMonth := int(time.Now().Month())
+
+	// Start with current month/year and query backwards if needed
+	var allRecords []*entity.Record
+	var total int64 = 0
+
+	// Start by querying the current month/year
+	taskIDPtr := &taskID
+	records, count, err := s.GetRecordListByTimeRange(
+		currentYear,
+		currentMonth,
+		taskIDPtr,
+		nil,  // no department filter
+		nil,  // no success filter
+		1,    // page
+		1000, // large size to get all records
+		startTime,
+		endTime,
+	)
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	allRecords = append(allRecords, records...)
+	total += count
+
+	// If the start time is from a previous month, we need to query those months too
+	startYear := startTime.Year()
+	startMonth := int(startTime.Month())
+
+	// Query previous months if needed
+	for (currentYear > startYear) || (currentYear == startYear && currentMonth > startMonth) {
+		// Move to previous month
+		currentMonth--
+		if currentMonth == 0 {
+			currentMonth = 12
+			currentYear--
+		}
+
+		// Don't go beyond the start date
+		if currentYear < startYear || (currentYear == startYear && currentMonth < startMonth) {
+			break
+		}
+
+		// Query this month
+		records, count, err := s.GetRecordListByTimeRange(
+			currentYear,
+			currentMonth,
+			taskIDPtr,
+			nil,  // no department filter
+			nil,  // no success filter
+			1,    // page
+			1000, // large size to get all records
+			startTime,
+			endTime,
+		)
+
+		if err != nil {
+			// Log error but continue with what we have
+			continue
+		}
+
+		allRecords = append(allRecords, records...)
+		total += count
+	}
+
+	// Apply pagination to the aggregated results
+	start := offset
+	end := offset + limit
+	if start >= len(allRecords) {
+		return []*entity.Record{}, total, nil
+	}
+	if end > len(allRecords) {
+		end = len(allRecords)
+	}
+
+	return allRecords[start:end], total, nil
+}
+
+// GetTaskStatistics gets task statistics for the specified time range and department
+func (s *taskService) GetTaskStatistics(departmentID int64, startTime, endTime time.Time) (*TaskStatistics, error) {
+	// Determine the year and month for partitioning
+	currentYear := time.Now().Year()
+	currentMonth := int(time.Now().Month())
+
+	// Initialize statistics
+	stats := &TaskStatistics{
+		TaskCount:        0,
+		SuccessRate:      0,
+		AvgExecutionTime: 0,
+		ExecutionStats:   make(map[string]float64),
+	}
+
+	// Get department tasks count
+	deptIDPtr := &departmentID
+	_, count, err := s.GetTaskList(departmentID, 1, 1000)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set task count
+	stats.TaskCount = int(count)
+
+	// Get record statistics for the current month
+	statsMap, err := s.GetRecordStats(currentYear, currentMonth, nil, deptIDPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract success rate
+	if successRate, ok := statsMap["success_rate"].(float64); ok {
+		stats.SuccessRate = successRate
+	}
+
+	// Extract average execution time
+	if avgExecTime, ok := statsMap["avg_execution_time"].(float64); ok {
+		stats.AvgExecutionTime = avgExecTime
+	}
+
+	// Extract type-specific statistics
+	if httpSuccessRate, ok := statsMap["http_success_rate"].(float64); ok {
+		stats.ExecutionStats["http_success_rate"] = httpSuccessRate
+	}
+
+	if grpcSuccessRate, ok := statsMap["grpc_success_rate"].(float64); ok {
+		stats.ExecutionStats["grpc_success_rate"] = grpcSuccessRate
+	}
+
+	if httpAvgTime, ok := statsMap["http_avg_time"].(float64); ok {
+		stats.ExecutionStats["http_avg_time"] = httpAvgTime
+	}
+
+	if grpcAvgTime, ok := statsMap["grpc_avg_time"].(float64); ok {
+		stats.ExecutionStats["grpc_avg_time"] = grpcAvgTime
+	}
+
+	if totalTasks, ok := statsMap["total_tasks"].(int); ok {
+		stats.ExecutionStats["total_tasks"] = float64(totalTasks)
+	}
+
+	if totalSuccess, ok := statsMap["total_success"].(int); ok {
+		stats.ExecutionStats["total_success"] = float64(totalSuccess)
+	}
+
+	if totalFailed, ok := statsMap["total_failed"].(int); ok {
+		stats.ExecutionStats["total_failed"] = float64(totalFailed)
+	}
+
+	return stats, nil
 }
 
 // validateHTTPTask 验证HTTP任务

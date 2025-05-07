@@ -12,6 +12,15 @@ database:
   max_idle: 10
   max_conn: 50
 
+redis:
+  url: localhost:6379
+  password: ""
+  db: 0
+  max_idle: 10
+  max_active: 100
+  idle_timeout: 300
+  connect_timeout: 5
+
 log:
   level: info
   filename: logs/distributed_job.log
@@ -22,8 +31,11 @@ log:
 
 auth:
   jwt_secret: 8d7e48a2dc1d3e7f9a8b6c5d4e3f2a1b
-  jwt_expire_hours: 24
+  jwt_refresh_secret: 9s8d7f6g5h4j3k2l1q0w9e8r7t6y5u4i
+  jwt_expire_minutes: 30
+  jwt_refresh_expire_days: 7
   enable_encryption: true
+  token_revocation_strategy: redis # options: memory, redis
 
 job:
   http_workers: 10

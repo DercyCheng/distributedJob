@@ -18,11 +18,12 @@ import (
 
 // Server 表示API服务器
 type Server struct {
-	config      *config.Config
-	router      *gin.Engine
-	scheduler   *job.Scheduler
-	taskService service.TaskService
-	authService service.AuthService
+	config       *config.Config
+	router       *gin.Engine
+	scheduler    *job.Scheduler
+	taskService  service.TaskService
+	authService  service.AuthService
+	tokenRevoker store.TokenRevoker
 }
 
 // ResponseBody API响应体
@@ -46,33 +47,33 @@ type ApiError struct {
 
 // ErrorDetails 定义错误详情常量
 var ErrorDetails = struct {
-	FieldRequired        string
-	FieldInvalidFormat   string
-	FieldInvalidValue    string
-	FieldTooLong         string
-	FieldTooShort        string
-	ResourceNotFound     string
+	FieldRequired         string
+	FieldInvalidFormat    string
+	FieldInvalidValue     string
+	FieldTooLong          string
+	FieldTooShort         string
+	ResourceNotFound      string
 	ResourceAlreadyExists string
-	AuthFailed           string
-	PermissionDenied     string
-	SystemError          string
-	DatabaseError        string
-	NetworkError         string
-	ValidationError      string
+	AuthFailed            string
+	PermissionDenied      string
+	SystemError           string
+	DatabaseError         string
+	NetworkError          string
+	ValidationError       string
 }{
-	FieldRequired:        "FIELD_REQUIRED",
-	FieldInvalidFormat:   "FIELD_INVALID_FORMAT",
-	FieldInvalidValue:    "FIELD_INVALID_VALUE",
-	FieldTooLong:         "FIELD_TOO_LONG",
-	FieldTooShort:        "FIELD_TOO_SHORT",
-	ResourceNotFound:     "RESOURCE_NOT_FOUND",
+	FieldRequired:         "FIELD_REQUIRED",
+	FieldInvalidFormat:    "FIELD_INVALID_FORMAT",
+	FieldInvalidValue:     "FIELD_INVALID_VALUE",
+	FieldTooLong:          "FIELD_TOO_LONG",
+	FieldTooShort:         "FIELD_TOO_SHORT",
+	ResourceNotFound:      "RESOURCE_NOT_FOUND",
 	ResourceAlreadyExists: "RESOURCE_ALREADY_EXISTS",
-	AuthFailed:           "AUTH_FAILED",
-	PermissionDenied:     "PERMISSION_DENIED",
-	SystemError:          "SYSTEM_ERROR",
-	DatabaseError:        "DATABASE_ERROR", 
-	NetworkError:         "NETWORK_ERROR",
-	ValidationError:      "VALIDATION_ERROR",
+	AuthFailed:            "AUTH_FAILED",
+	PermissionDenied:      "PERMISSION_DENIED",
+	SystemError:           "SYSTEM_ERROR",
+	DatabaseError:         "DATABASE_ERROR",
+	NetworkError:          "NETWORK_ERROR",
+	ValidationError:       "VALIDATION_ERROR",
 }
 
 // ErrorCodes defines standard API error codes
@@ -81,39 +82,39 @@ var ErrorCodes = struct {
 	Success int
 
 	// Client errors (4000-4999)
-	BadRequest           int
-	Unauthorized         int
-	Forbidden            int
-	NotFound             int
-	MethodNotAllowed     int
-	Conflict             int
-	TooManyRequests      int
-	ValidationFailed     int
+	BadRequest            int
+	Unauthorized          int
+	Forbidden             int
+	NotFound              int
+	MethodNotAllowed      int
+	Conflict              int
+	TooManyRequests       int
+	ValidationFailed      int
 	ResourceAlreadyExists int
 
 	// Server errors (5000-5999)
-	InternalServerError int
-	ServiceUnavailable  int
-	DatabaseError       int
+	InternalServerError  int
+	ServiceUnavailable   int
+	DatabaseError        int
 	ExternalServiceError int
-	
+
 	// Business logic errors (6000-6999)
-	TaskExecutionFailed int
-	ScheduleError       int
+	TaskExecutionFailed  int
+	ScheduleError        int
 	AuthenticationFailed int
 }{
 	// Success
 	Success: 0,
 
 	// Client errors
-	BadRequest:           4000,
-	Unauthorized:         4001,
-	Forbidden:            4003,
-	NotFound:             4004,
-	MethodNotAllowed:     4005,
-	Conflict:             4009,
-	TooManyRequests:      4029,
-	ValidationFailed:     4400,
+	BadRequest:            4000,
+	Unauthorized:          4001,
+	Forbidden:             4003,
+	NotFound:              4004,
+	MethodNotAllowed:      4005,
+	Conflict:              4009,
+	TooManyRequests:       4029,
+	ValidationFailed:      4400,
 	ResourceAlreadyExists: 4409,
 
 	// Server errors
@@ -121,7 +122,7 @@ var ErrorCodes = struct {
 	ServiceUnavailable:   5003,
 	DatabaseError:        5100,
 	ExternalServiceError: 5400,
-	
+
 	// Business logic errors
 	TaskExecutionFailed:  6000,
 	ScheduleError:        6100,
@@ -133,6 +134,8 @@ func NewServer(
 	config *config.Config,
 	scheduler *job.Scheduler,
 	repoManager store.RepositoryManager,
+	authService service.AuthService,
+	tokenRevoker store.TokenRevoker,
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
@@ -145,24 +148,13 @@ func NewServer(
 	// 创建服务
 	taskService := service.NewTaskService(repoManager.Task(), scheduler)
 
-	// 使用正确的参数创建认证服务
-	jwtSecret := config.Auth.JwtSecret
-	tokenExpire := time.Duration(config.Auth.JwtExpireHours) * time.Hour
-	authService := service.NewAuthService(
-		repoManager.User(),
-		repoManager.Role(),
-		repoManager.Department(),
-		repoManager.Permission(),
-		jwtSecret,
-		tokenExpire,
-	)
-
 	s := &Server{
-		config:      config,
-		router:      router,
-		scheduler:   scheduler,
-		taskService: taskService,
-		authService: authService,
+		config:       config,
+		router:       router,
+		scheduler:    scheduler,
+		taskService:  taskService,
+		authService:  authService,
+		tokenRevoker: tokenRevoker,
 	}
 
 	s.setupRoutes()
@@ -189,12 +181,14 @@ func (s *Server) setupRoutes() {
 	authGroup := base.Group("/auth")
 	{
 		authGroup.POST("/login", s.login)
-		authGroup.POST("/refresh", s.refreshToken)
+		// 使用专门的刷新令牌中间件
+		authGroup.POST("/refresh", middleware.RefreshAuth(s.config, s.tokenRevoker), s.refreshToken)
+		authGroup.POST("/logout", s.logout)
 	}
 
 	// 所有其他API需要JWT验证
 	auth := base.Group("")
-	auth.Use(middleware.JWTAuth(s.config))
+	auth.Use(middleware.JWTAuth(s.config, s.tokenRevoker))
 
 	// 用户信息API
 	auth.GET("/auth/userinfo", s.getUserInfo)
@@ -257,18 +251,6 @@ func (s *Server) setupRoutes() {
 	base.OPTIONS("/*path", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
-
-	// 下面的单独OPTIONS处理可以移除，因为上面的全局处理已经包含了这些路径
-	// 但为了向后兼容性和明确性，我们保留它们
-	base.OPTIONS("/auth/login", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-	base.OPTIONS("/auth/refresh", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-	base.OPTIONS("/auth/userinfo", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
 }
 
 // 健康检查API
@@ -304,27 +286,27 @@ func (s *Server) login(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// 详细解析验证错误信息
 		validationErrors := []map[string]string{}
-		
+
 		if strings.Contains(err.Error(), "username") {
 			validationErrors = append(validationErrors, map[string]string{
 				"field": "username",
 				"error": "用户名不能为空",
 			})
 		}
-		
+
 		if strings.Contains(err.Error(), "password") {
 			validationErrors = append(validationErrors, map[string]string{
 				"field": "password",
 				"error": "密码不能为空",
 			})
 		}
-		
+
 		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "请求参数验证失败",
-			Data:       validationErrors,
-			ErrorType:  ErrorDetails.ValidationError,
-			RequestId:  c.GetString("requestId"),
+			Code:      ErrorCodes.ValidationFailed,
+			Message:   "请求参数验证失败",
+			Data:      validationErrors,
+			ErrorType: ErrorDetails.ValidationError,
+			RequestId: c.GetString("requestId"),
 		})
 		return
 	}
@@ -353,11 +335,11 @@ func (s *Server) login(c *gin.Context) {
 	}
 
 	// 调用认证服务登录
-	token, err := s.authService.Login(req.Username, req.Password)
+	accessToken, refreshToken, user, err := s.authService.Login(req.Username, req.Password)
 	if err != nil {
 		errorMsg := err.Error()
 		errorType := ErrorDetails.AuthFailed
-		
+
 		// 根据具体错误类型提供更友好的错误消息
 		if strings.Contains(errorMsg, "not found") {
 			errorMsg = "用户不存在"
@@ -385,64 +367,57 @@ func (s *Server) login(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusUnauthorized, ResponseBody{
-			Code:       ErrorCodes.Unauthorized,
-			Message:    errorMsg,
-			Data:       nil,
-			ErrorType:  errorType,
-			RequestId:  c.GetString("requestId"),
+			Code:      ErrorCodes.Unauthorized,
+			Message:   errorMsg,
+			Data:      nil,
+			ErrorType: errorType,
+			RequestId: c.GetString("requestId"),
 		})
 		return
 	}
-
-	// 获取用户ID
-	claims, _ := s.authService.ValidateToken(token)
 
 	c.JSON(http.StatusOK, ResponseBody{
 		Code:      ErrorCodes.Success,
 		Message:   "登录成功",
 		RequestId: c.GetString("requestId"),
 		Data: map[string]interface{}{
-			"token":  token,
-			"userId": claims.UserID,
+			"accessToken":  accessToken,
+			"refreshToken": refreshToken,
+			"userId":       user.ID,
+			"username":     user.Username,
+			"realName":     user.RealName,
+			"departmentId": user.DepartmentID,
+			"roleId":       user.RoleID,
+			"tokenType":    "Bearer",
+			"expiresIn":    s.config.Auth.JwtExpireMinutes * 60, // 过期时间(秒)
 		},
 	})
 }
 
 // 刷新Token API
 func (s *Server) refreshToken(c *gin.Context) {
-	// 解析请求参数
-	var req struct {
-		Token string `json:"token" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:    ErrorCodes.BadRequest,
-			Message: "invalid request parameters",
+	// 从上下文获取用户ID（已通过中间件验证刷新令牌）
+	userID, exists := c.Get("userId")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ResponseBody{
+			Code:    ErrorCodes.Unauthorized,
+			Message: "Invalid refresh token",
 			Data:    nil,
 		})
 		return
 	}
 
-	// 验证当前Token
-	claims, err := s.authService.ValidateToken(req.Token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, ResponseBody{
-			Code:    ErrorCodes.Unauthorized,
-			Message: err.Error(),
-			Data:    nil,
-		})
-		return
-	}
+	// 生成新的令牌对
+	accessToken, refreshToken, err := s.authService.GenerateTokens(&entity.User{
+		ID: userID.(int64),
+	})
 
-	// 使用RefreshToken方法生成新的Token
-	token, err := s.authService.RefreshToken(claims.UserID)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, ResponseBody{
-			Code:    ErrorCodes.Unauthorized,
-			Message: err.Error(),
+		c.JSON(http.StatusInternalServerError, ResponseBody{
+			Code:    ErrorCodes.InternalServerError,
+			Message: "Failed to generate tokens: " + err.Error(),
 			Data:    nil,
 		})
 		return
@@ -450,10 +425,46 @@ func (s *Server) refreshToken(c *gin.Context) {
 
 	c.JSON(http.StatusOK, ResponseBody{
 		Code:    ErrorCodes.Success,
-		Message: "success",
+		Message: "Token refreshed successfully",
 		Data: map[string]interface{}{
-			"token": token,
+			"accessToken":  accessToken,
+			"refreshToken": refreshToken,
+			"tokenType":    "Bearer",
+			"expiresIn":    s.config.Auth.JwtExpireMinutes * 60, // 过期时间(秒)
 		},
+	})
+}
+
+// 登出API
+func (s *Server) logout(c *gin.Context) {
+	// 解析请求参数
+	var req struct {
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, ResponseBody{
+			Code:    ErrorCodes.Success,
+			Message: "Logged out successfully",
+			Data:    nil,
+		})
+		return
+	}
+
+	// 撤销访问令牌和刷新令牌
+	if req.AccessToken != "" {
+		_ = s.authService.RevokeToken(req.AccessToken)
+	}
+
+	if req.RefreshToken != "" {
+		_ = s.authService.RevokeToken(req.RefreshToken)
+	}
+
+	c.JSON(http.StatusOK, ResponseBody{
+		Code:    ErrorCodes.Success,
+		Message: "Logged out successfully",
+		Data:    nil,
 	})
 }
 
@@ -604,11 +615,11 @@ func (s *Server) createHTTPTask(c *gin.Context) {
 		return
 	}
 
-	if task.CronExpression == "" {
+	if task.Cron == "" {
 		c.JSON(http.StatusBadRequest, ResponseBody{
 			Code:       ErrorCodes.ValidationFailed,
 			Message:    "CRON 表达式不能为空",
-			ErrorField: "cronExpression",
+			ErrorField: "cron",
 			ErrorType:  ErrorDetails.FieldRequired,
 			RequestId:  c.GetString("requestId"),
 		})
@@ -616,40 +627,17 @@ func (s *Server) createHTTPTask(c *gin.Context) {
 	}
 
 	// 验证 HTTP 任务特有字段
-	httpConfig, ok := task.Config.(map[string]interface{})
-	if !ok || httpConfig == nil {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "HTTP 配置信息不能为空",
-			ErrorField: "config",
-			ErrorType:  ErrorDetails.FieldRequired,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
-	}
-
-	url, ok := httpConfig["url"].(string)
-	if !ok || url == "" {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "HTTP URL 不能为空",
-			ErrorField: "config.url",
-			ErrorType:  ErrorDetails.FieldRequired,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
-	}
-
-	// 检查 URL 格式是否有效
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "URL 必须以 http:// 或 https:// 开头",
-			ErrorField: "config.url",
-			ErrorType:  ErrorDetails.FieldInvalidFormat,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
+	if task.TaskType == "HTTP" {
+		if task.URL == "" {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "HTTP URL 不能为空",
+				ErrorField: "url",
+				ErrorType:  ErrorDetails.FieldRequired,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
 	}
 
 	// 调用任务服务创建HTTP任务
@@ -665,44 +653,40 @@ func (s *Server) createHTTPTask(c *gin.Context) {
 				RequestId:  c.GetString("requestId"),
 			})
 			return
-		} 
-		
+		}
+
 		if strings.Contains(err.Error(), "invalid cron") {
 			c.JSON(http.StatusBadRequest, ResponseBody{
 				Code:       ErrorCodes.ValidationFailed,
 				Message:    "CRON 表达式格式不正确",
-				ErrorField: "cronExpression",
+				ErrorField: "cron",
 				ErrorType:  ErrorDetails.FieldInvalidFormat,
 				RequestId:  c.GetString("requestId"),
 			})
 			return
 		}
-		
+
 		if strings.Contains(err.Error(), "department") {
 			c.JSON(http.StatusBadRequest, ResponseBody{
 				Code:       ErrorCodes.ValidationFailed,
 				Message:    "部门不存在或无效",
 				ErrorField: "departmentId",
 				ErrorType:  ErrorDetails.FieldInvalidValue,
-				RequestId:  c.GetString("requestId"),
 			})
 			return
 		}
 
-		// 通用错误处理
 		c.JSON(http.StatusInternalServerError, ResponseBody{
-			Code:       ErrorCodes.InternalServerError,
-			Message:    "创建任务失败: " + err.Error(),
-			ErrorType:  ErrorDetails.SystemError,
-			RequestId:  c.GetString("requestId"),
+			Code:    ErrorCodes.InternalServerError,
+			Message: err.Error(),
+			Data:    nil,
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, ResponseBody{
-		Code:      ErrorCodes.Success,
-		Message:   "任务创建成功",
-		RequestId: c.GetString("requestId"),
+		Code:    ErrorCodes.Success,
+		Message: "success",
 		Data: map[string]interface{}{
 			"id": id,
 		},
@@ -720,6 +704,31 @@ func (s *Server) createGRPCTask(c *gin.Context) {
 			Data:    nil,
 		})
 		return
+	}
+
+	// 验证 gRPC 任务特有字段
+	if task.TaskType == "GRPC" {
+		if task.GrpcService == "" {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "gRPC 服务名称不能为空",
+				ErrorField: "grpcService",
+				ErrorType:  ErrorDetails.FieldRequired,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
+
+		if task.GrpcMethod == "" {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "gRPC 方法名称不能为空",
+				ErrorField: "grpcMethod",
+				ErrorType:  ErrorDetails.FieldRequired,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
 	}
 
 	// 调用任务服务创建GRPC任务
@@ -832,55 +841,31 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 	task.ID = id
 
 	// 验证 gRPC 任务特有字段
-	grpcConfig, ok := task.Config.(map[string]interface{})
-	if !ok || grpcConfig == nil {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "gRPC 配置信息不能为空",
-			ErrorField: "config",
-			ErrorType:  ErrorDetails.FieldRequired,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
+	if task.TaskType == "GRPC" {
+		if task.GrpcService == "" {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "gRPC 服务名称不能为空",
+				ErrorField: "grpcService",
+				ErrorType:  ErrorDetails.FieldRequired,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
+
+		if task.GrpcMethod == "" {
+			c.JSON(http.StatusBadRequest, ResponseBody{
+				Code:       ErrorCodes.ValidationFailed,
+				Message:    "gRPC 方法名称不能为空",
+				ErrorField: "grpcMethod",
+				ErrorType:  ErrorDetails.FieldRequired,
+				RequestId:  c.GetString("requestId"),
+			})
+			return
+		}
 	}
 
-	server, ok := grpcConfig["server"].(string)
-	if !ok || server == "" {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "gRPC 服务器地址不能为空",
-			ErrorField: "config.server",
-			ErrorType:  ErrorDetails.FieldRequired,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
-	}
-
-	service, ok := grpcConfig["service"].(string)
-	if !ok || service == "" {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "gRPC 服务名称不能为空",
-			ErrorField: "config.service",
-			ErrorType:  ErrorDetails.FieldRequired,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
-	}
-
-	method, ok := grpcConfig["method"].(string)
-	if !ok || method == "" {
-		c.JSON(http.StatusBadRequest, ResponseBody{
-			Code:       ErrorCodes.ValidationFailed,
-			Message:    "gRPC 方法名称不能为空",
-			ErrorField: "config.method",
-			ErrorType:  ErrorDetails.FieldRequired,
-			RequestId:  c.GetString("requestId"),
-		})
-		return
-	}
-
-	// 调用任务服务更新GRPC任务
+	// 调用任务服务更新GRPCTask
 	err = s.taskService.UpdateGRPCTask(&task)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -893,10 +878,10 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 			code = ErrorCodes.NotFound
 			errorType = ErrorDetails.ResourceNotFound
 			c.JSON(status, ResponseBody{
-				Code:       code,
-				Message:    "任务不存在",
-				ErrorType:  errorType,
-				RequestId:  c.GetString("requestId"),
+				Code:      code,
+				Message:   "任务不存在",
+				ErrorType: errorType,
+				RequestId: c.GetString("requestId"),
 			})
 			return
 		} else if err == service.ErrInvalidParameters {
@@ -904,10 +889,10 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 			code = ErrorCodes.BadRequest
 			errorType = ErrorDetails.ValidationError
 			c.JSON(status, ResponseBody{
-				Code:       code,
-				Message:    "参数无效，请检查输入",
-				ErrorType:  errorType,
-				RequestId:  c.GetString("requestId"),
+				Code:      code,
+				Message:   "参数无效，请检查输入",
+				ErrorType: errorType,
+				RequestId: c.GetString("requestId"),
 			})
 			return
 		}
@@ -931,10 +916,10 @@ func (s *Server) updateGRPCTask(c *gin.Context) {
 
 		// 其他错误的通用处理
 		c.JSON(status, ResponseBody{
-			Code:       code,
-			Message:    "更新任务失败: " + errorMsg,
-			ErrorType:  errorType,
-			RequestId:  c.GetString("requestId"),
+			Code:      code,
+			Message:   "更新任务失败: " + errorMsg,
+			ErrorType: errorType,
+			RequestId: c.GetString("requestId"),
 		})
 		return
 	}
@@ -1595,14 +1580,12 @@ func (s *Server) deleteUser(c *gin.Context) {
 		code := ErrorCodes.InternalServerError
 
 		// 根据错误类型设置不同的状态码
-		if err != nil {
-			if err.Error() == "user not found" {
-				status = http.StatusNotFound
-				code = ErrorCodes.NotFound
-			} else if err.Error() == "cannot delete user with tasks" {
-				status = http.StatusBadRequest
-				code = ErrorCodes.BadRequest
-			}
+		if err.Error() == "user not found" {
+			status = http.StatusNotFound
+			code = ErrorCodes.NotFound
+		} else if err.Error() == "cannot delete user with tasks" {
+			status = http.StatusBadRequest
+			code = ErrorCodes.BadRequest
 		}
 
 		c.JSON(status, ResponseBody{
@@ -1983,10 +1966,10 @@ func (s *Server) localOnly() gin.HandlerFunc {
 func (s *Server) parseValidationError(err error) []map[string]string {
 	validationErrors := []map[string]string{}
 	errorString := err.Error()
-	
+
 	// 解析验证错误信息
 	// 根据字段名称检测错误类型
-	fieldNames := []string{"name", "cronExpression", "type", "description", "config", "departmentId", "status"}
+	fieldNames := []string{"name", "cron", "type", "description", "config", "departmentId", "status"}
 	for _, field := range fieldNames {
 		if strings.Contains(errorString, field) {
 			validationErrors = append(validationErrors, map[string]string{
@@ -1995,7 +1978,7 @@ func (s *Server) parseValidationError(err error) []map[string]string {
 			})
 		}
 	}
-	
+
 	// 如果没有找到具体字段错误，添加一个通用错误
 	if len(validationErrors) == 0 {
 		validationErrors = append(validationErrors, map[string]string{
@@ -2003,6 +1986,6 @@ func (s *Server) parseValidationError(err error) []map[string]string {
 			"error": "参数格式不正确",
 		})
 	}
-	
+
 	return validationErrors
 }

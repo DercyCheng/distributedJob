@@ -174,7 +174,7 @@ func (s *Scheduler) AddTask(task *entity.Task) error {
 
 	// 记录任务ID和对应的EntryID
 	s.jobs[task.ID] = entryID
-	logger.Infof("Added task to scheduler: %s (ID: %d, Cron: %s)", task.Name, task.ID, task.Cron)
+	logger.Infof("Added task to scheduler: (ID: %d, Cron: %s)", task.ID, task.Cron)
 	return nil
 }
 
@@ -233,10 +233,10 @@ func (s *Scheduler) processResults() {
 func (s *Scheduler) saveTaskResult(task *entity.Task, result *JobResult) {
 	// Create record time
 	now := time.Now()
-	
+
 	// Update task execution time tracking
 	s.UpdateTaskExecutionTime(task.ID, now)
-	
+
 	// 创建执行记录
 	record := &entity.Record{
 		TaskID:       task.ID,
@@ -303,20 +303,20 @@ func (s *Scheduler) AddTaskAndStore(task *entity.Task) (int64, error) {
 	if s.taskStore == nil {
 		return 0, errors.New("task repository not initialized")
 	}
-	
+
 	taskID, err := s.taskStore.CreateTask(task)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// Set the ID from the repository
 	task.ID = taskID
-	
+
 	// Add task to scheduler
 	if err := s.AddTask(task); err != nil {
 		return taskID, err
 	}
-	
+
 	return taskID, nil
 }
 
@@ -324,22 +324,22 @@ func (s *Scheduler) AddTaskAndStore(task *entity.Task) (int64, error) {
 func (s *Scheduler) PauseTask(taskID int64) error {
 	s.jobsMutex.Lock()
 	defer s.jobsMutex.Unlock()
-	
+
 	// Check if task exists in scheduler
 	if _, found := s.jobs[taskID]; !found {
 		return fmt.Errorf("task with ID %d not found in scheduler", taskID)
 	}
-	
+
 	// Remove from cron scheduler
 	s.RemoveTask(taskID)
-	
+
 	// Update task status in database
 	if s.taskStore != nil {
 		if err := s.taskStore.UpdateTaskStatus(taskID, int8(0)); err != nil {
 			return err
 		}
 	}
-	
+
 	logger.Infof("Task paused: ID %d", taskID)
 	return nil
 }
@@ -350,22 +350,22 @@ func (s *Scheduler) ResumeTask(taskID int64) error {
 	if s.taskStore == nil {
 		return errors.New("task repository not initialized")
 	}
-	
+
 	task, err := s.taskStore.GetTaskByID(taskID)
 	if err != nil {
 		return err
 	}
-	
+
 	// Update status in database
 	if err := s.taskStore.UpdateTaskStatus(taskID, int8(1)); err != nil {
 		return err
 	}
-	
+
 	// Add task back to scheduler
 	if err := s.AddTask(task); err != nil {
 		return err
 	}
-	
+
 	logger.Infof("Task resumed: ID %d", taskID)
 	return nil
 }
@@ -376,17 +376,17 @@ func (s *Scheduler) GetTaskStatus(taskID int64) (*entity.Task, error) {
 	if s.taskStore == nil {
 		return nil, errors.New("task repository not initialized")
 	}
-	
+
 	task, err := s.taskStore.GetTaskByID(taskID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Check if task is currently scheduled
 	s.jobsMutex.RLock()
 	_, isScheduled := s.jobs[taskID]
 	s.jobsMutex.RUnlock()
-	
+
 	// Update task with scheduler status
 	if isScheduled {
 		// Get the cron entry to determine next execution time
@@ -395,7 +395,7 @@ func (s *Scheduler) GetTaskStatus(taskID int64) (*entity.Task, error) {
 		nextTime := entry.Next
 		task.NextExecuteTime = &nextTime
 	}
-	
+
 	return task, nil
 }
 
@@ -405,30 +405,30 @@ func (s *Scheduler) UpdateTaskExecutionTime(taskID int64, executionTime time.Tim
 	if s.taskStore == nil {
 		return errors.New("task repository not initialized")
 	}
-	
+
 	task, err := s.taskStore.GetTaskByID(taskID)
 	if err != nil {
 		return err
 	}
-	
+
 	// Update the last execution time
 	task.LastExecuteTime = &executionTime
-	
+
 	// Calculate next execution time based on cron expression
 	s.jobsMutex.RLock()
 	entryID, found := s.jobs[taskID]
 	s.jobsMutex.RUnlock()
-	
+
 	if found {
 		entry := s.cron.Entry(entryID)
 		nextTime := entry.Next
 		task.NextExecuteTime = &nextTime
 	}
-	
+
 	// Update task in database if there's a specialized method for it
 	// For now, we'll just log the update
 	logger.Infof("Updated task execution time: %s (ID: %d, Last: %v, Next: %v)",
 		task.Name, task.ID, executionTime, task.NextExecuteTime)
-	
+
 	return nil
 }

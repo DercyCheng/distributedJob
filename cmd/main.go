@@ -15,8 +15,11 @@ import (
 	"github.com/distributedJob/internal/job"
 	"github.com/distributedJob/internal/rpc/server"
 	"github.com/distributedJob/internal/service"
+	"github.com/distributedJob/internal/store"
 	"github.com/distributedJob/internal/store/mysql"
+	"github.com/distributedJob/internal/store/redis"
 	"github.com/distributedJob/pkg/logger"
+	"github.com/distributedJob/pkg/memory"
 )
 
 var (
@@ -60,6 +63,24 @@ func main() {
 		logger.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// 初始化令牌撤销器
+	var tokenRevoker store.TokenRevoker
+	if cfg.Auth.TokenRevocationStrategy == "redis" {
+		// 使用Redis作为令牌撤销存储
+		redisManager, err := redis.NewManager(cfg)
+		if err != nil {
+			logger.Warnf("Failed to connect to Redis, falling back to memory token storage: %v", err)
+			tokenRevoker = memory.NewMemoryTokenRevoker()
+		} else {
+			tokenRevoker = redisManager.CreateTokenRevoker()
+			// 注册Redis关闭函数
+			defer redisManager.Close()
+		}
+	} else {
+		// 使用内存作为令牌撤销存储
+		tokenRevoker = memory.NewMemoryTokenRevoker()
+	}
+
 	// 系统初始化（添加默认管理员用户等）
 	if err := service.InitializeSystem(
 		repoManager.User(),
@@ -80,15 +101,19 @@ func main() {
 	scheduler.SetTaskRepository(repoManager.Task())
 
 	// 创建服务
-	taskService := service.NewTaskService(repoManager.Task(), scheduler)
 	authService := service.NewAuthService(
 		repoManager.User(),
 		repoManager.Role(),
 		repoManager.Department(),
 		repoManager.Permission(),
 		cfg.Auth.JwtSecret,
-		time.Duration(cfg.Auth.JwtExpireHours)*time.Hour,
+		cfg.Auth.JwtRefreshSecret,
+		time.Duration(cfg.Auth.JwtExpireMinutes)*time.Minute,
+		time.Duration(cfg.Auth.JwtRefreshExpireDays)*24*time.Hour,
+		tokenRevoker,
 	)
+
+	taskService := service.NewTaskService(repoManager.Task(), scheduler)
 
 	// 启动调度器
 	if err := scheduler.Start(); err != nil {
@@ -96,7 +121,7 @@ func main() {
 	}
 
 	// 创建API服务器
-	apiServer := api.NewServer(cfg, scheduler, repoManager)
+	apiServer := api.NewServer(cfg, scheduler, repoManager, authService, tokenRevoker)
 
 	// 创建RPC服务器
 	rpcServer := server.NewRPCServer(cfg, scheduler, taskService, authService)

@@ -2,26 +2,32 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/distributedJob/internal/model/entity"
 	"github.com/distributedJob/internal/store"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
 	// User status constants
 	UserStatusEnabled  int8 = 1
-	UserStatusDisabled int8 = 2
+	UserStatusDisabled int8 = 0
 )
 
 // AuthService 认证服务接口
 type AuthService interface {
 	// 用户认证
-	Login(username, password string) (string, error)
-	RefreshToken(userID int64) (string, error)
-	ValidateToken(tokenString string) (*Claims, error)
+	Login(username, password string) (string, string, *entity.User, error)
+	GenerateTokens(user *entity.User) (string, string, error)
+	RefreshToken(refreshToken string) (string, string, error)
+	ValidateToken(tokenString string) (int64, error)
+	ValidateRefreshToken(tokenString string) (int64, error)
+	RevokeToken(token string) error
+	IsTokenRevoked(jti string) bool
 
 	// 用户管理
 	GetUserList(departmentID int64, page, size int) ([]*entity.User, int64, error)
@@ -29,6 +35,7 @@ type AuthService interface {
 	CreateUser(user *entity.User) (int64, error)
 	UpdateUser(user *entity.User) error
 	DeleteUser(id int64) error
+	GetUserPermissions(userID int64) ([]string, error)
 
 	// 角色管理
 	GetRoleList(page, size int) ([]*entity.Role, int64, error)
@@ -49,23 +56,29 @@ type AuthService interface {
 	HasPermission(userID int64, permissionCode string) (bool, error)
 }
 
-// Claims 自定义JWT声明
-type Claims struct {
-	UserID       int64  `json:"user_id"`
-	Username     string `json:"username"`
-	DepartmentID int64  `json:"department_id"`
-	RoleID       int64  `json:"role_id"`
+// AccessClaims 访问令牌的JWT声明
+type AccessClaims struct {
+	UserID int64 `json:"user_id"`
+	jwt.StandardClaims
+}
+
+// RefreshClaims 刷新令牌的JWT声明
+type RefreshClaims struct {
+	UserID int64 `json:"user_id"`
 	jwt.StandardClaims
 }
 
 // authService 认证服务实现
 type authService struct {
-	userRepo       store.UserRepository
-	roleRepo       store.RoleRepository
-	deptRepo       store.DepartmentRepository
-	permissionRepo store.PermissionRepository
-	jwtSecret      []byte
-	tokenExpire    time.Duration
+	userRepo           store.UserRepository
+	roleRepo           store.RoleRepository
+	deptRepo           store.DepartmentRepository
+	permissionRepo     store.PermissionRepository
+	jwtSecret          []byte
+	jwtRefreshSecret   []byte
+	accessTokenExpire  time.Duration      // 短期token过期时间 (30分钟)
+	refreshTokenExpire time.Duration      // 长期token过期时间 (7天)
+	tokenRevoker       store.TokenRevoker // 令牌撤销接口
 }
 
 // NewAuthService 创建认证服务
@@ -75,48 +88,86 @@ func NewAuthService(
 	deptRepo store.DepartmentRepository,
 	permissionRepo store.PermissionRepository,
 	jwtSecret string,
-	tokenExpire time.Duration,
+	jwtRefreshSecret string,
+	accessExpire time.Duration,
+	refreshExpire time.Duration,
+	tokenRevoker store.TokenRevoker,
 ) AuthService {
 	return &authService{
-		userRepo:       userRepo,
-		roleRepo:       roleRepo,
-		deptRepo:       deptRepo,
-		permissionRepo: permissionRepo,
-		jwtSecret:      []byte(jwtSecret),
-		tokenExpire:    tokenExpire,
+		userRepo:           userRepo,
+		roleRepo:           roleRepo,
+		deptRepo:           deptRepo,
+		permissionRepo:     permissionRepo,
+		jwtSecret:          []byte(jwtSecret),
+		jwtRefreshSecret:   []byte(jwtRefreshSecret),
+		accessTokenExpire:  accessExpire,
+		refreshTokenExpire: refreshExpire,
+		tokenRevoker:       tokenRevoker,
 	}
 }
 
 // Login 用户登录
-func (s *authService) Login(username, password string) (string, error) {
+func (s *authService) Login(username, password string) (string, string, *entity.User, error) {
 	// 查询用户
 	user, err := s.userRepo.GetUserByUsername(username)
 	if err != nil {
-		return "", err
+		return "", "", nil, err
 	}
 	if user == nil {
-		return "", errors.New("user not found")
+		return "", "", nil, errors.New("user not found")
 	}
 
 	// 检查用户状态
 	if user.Status != UserStatusEnabled {
-		return "", errors.New("user is disabled")
+		return "", "", nil, errors.New("user is disabled")
 	}
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", errors.New("invalid password")
+		return "", "", nil, errors.New("invalid password")
 	}
 
-	// 生成Token
-	claims := &Claims{
-		UserID:       user.ID,
-		Username:     user.Username,
-		DepartmentID: user.DepartmentID,
-		RoleID:       user.RoleID,
+	// 生成访问令牌和刷新令牌
+	accessToken, refreshToken, err := s.GenerateTokens(user)
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	// 清除敏感信息
+	user.Password = ""
+
+	return accessToken, refreshToken, user, nil
+}
+
+// GenerateTokens 生成访问令牌和刷新令牌
+func (s *authService) GenerateTokens(user *entity.User) (string, string, error) {
+	// 生成访问令牌
+	accessToken, err := s.generateAccessToken(user.ID)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 生成刷新令牌
+	refreshToken, err := s.generateRefreshToken(user.ID)
+	if err != nil {
+		return "", "", err
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+// generateAccessToken 生成访问令牌
+func (s *authService) generateAccessToken(userID int64) (string, error) {
+	nowTime := time.Now()
+	expireTime := nowTime.Add(s.accessTokenExpire)
+
+	claims := AccessClaims{
+		UserID: userID,
 		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(s.tokenExpire).Unix(),
-			IssuedAt:  time.Now().Unix(),
+			ExpiresAt: expireTime.Unix(),
+			IssuedAt:  nowTime.Unix(),
+			Id:        fmt.Sprintf("%d", userID),
+			Subject:   fmt.Sprintf("%d", userID),
 		},
 	}
 
@@ -124,61 +175,191 @@ func (s *authService) Login(username, password string) (string, error) {
 	return token.SignedString(s.jwtSecret)
 }
 
-// RefreshToken 刷新用户令牌
-func (s *authService) RefreshToken(userID int64) (string, error) {
-	// 查询用户
+// generateRefreshToken 生成刷新令牌
+func (s *authService) generateRefreshToken(userID int64) (string, error) {
+	nowTime := time.Now()
+	expireTime := nowTime.Add(s.refreshTokenExpire)
+
+	claims := RefreshClaims{
+		UserID: userID,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: expireTime.Unix(),
+			IssuedAt:  nowTime.Unix(),
+			Id:        fmt.Sprintf("refresh_%d_%s", userID, uuid.New().String()),
+			Subject:   fmt.Sprintf("%d", userID),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.jwtRefreshSecret)
+}
+
+// RefreshToken 使用刷新令牌获取新的令牌对
+func (s *authService) RefreshToken(refreshToken string) (string, string, error) {
+	// 验证刷新令牌
+	userID, err := s.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 获取用户
 	user, err := s.userRepo.GetUserByID(userID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if user == nil {
-		return "", errors.New("user not found")
+		return "", "", errors.New("user not found")
 	}
 
 	// 检查用户状态
 	if user.Status != UserStatusEnabled {
-		return "", errors.New("user is disabled")
+		return "", "", errors.New("user is disabled")
 	}
 
-	// 生成新Token
-	claims := &Claims{
-		UserID:       user.ID,
-		Username:     user.Username,
-		DepartmentID: user.DepartmentID,
-		RoleID:       user.RoleID,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(s.tokenExpire).Unix(),
-			IssuedAt:  time.Now().Unix(),
-		},
+	// 撤销旧的刷新令牌
+	if err := s.RevokeToken(refreshToken); err != nil {
+		return "", "", err
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.jwtSecret)
+
+	// 生成新的令牌对
+	return s.GenerateTokens(user)
 }
 
-// ValidateToken 验证Token
-func (s *authService) ValidateToken(tokenString string) (*Claims, error) {
-	// 解析Token
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+// ValidateToken 验证访问令牌
+func (s *authService) ValidateToken(tokenString string) (int64, error) {
+	// 解析令牌
+	token, err := jwt.ParseWithClaims(tokenString, &AccessClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
 
-	// 验证Token
+	// 验证令牌
+	if err != nil {
+		return 0, err
+	}
+
+	// 验证令牌是否有效
+	if !token.Valid {
+		return 0, errors.New("invalid token")
+	}
+
+	// 获取声明
+	claims, ok := token.Claims.(*AccessClaims)
+	if !ok {
+		return 0, errors.New("invalid token claims")
+	}
+
+	// 检查令牌是否被撤销
+	if s.IsTokenRevoked(claims.Id) {
+		return 0, errors.New("token has been revoked")
+	}
+
+	return claims.UserID, nil
+}
+
+// ValidateRefreshToken 验证刷新令牌
+func (s *authService) ValidateRefreshToken(tokenString string) (int64, error) {
+	// 解析令牌
+	token, err := jwt.ParseWithClaims(tokenString, &RefreshClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return s.jwtRefreshSecret, nil
+	})
+
+	// 验证令牌
+	if err != nil {
+		return 0, err
+	}
+
+	// 验证令牌是否有效
+	if !token.Valid {
+		return 0, errors.New("invalid refresh token")
+	}
+
+	// 获取声明
+	claims, ok := token.Claims.(*RefreshClaims)
+	if !ok {
+		return 0, errors.New("invalid refresh token claims")
+	}
+
+	// 检查令牌是否被撤销
+	if s.IsTokenRevoked(claims.Id) {
+		return 0, errors.New("refresh token has been revoked")
+	}
+
+	return claims.UserID, nil
+}
+
+// RevokeToken 撤销令牌
+func (s *authService) RevokeToken(tokenString string) error {
+	var claims jwt.StandardClaims
+
+	// 尝试作为访问令牌解析
+	token, _ := jwt.ParseWithClaims(tokenString, &AccessClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return s.jwtSecret, nil
+	})
+
+	if token != nil && token.Valid {
+		if accessClaims, ok := token.Claims.(*AccessClaims); ok {
+			claims = accessClaims.StandardClaims
+		}
+	} else {
+		// 尝试作为刷新令牌解析
+		token, _ = jwt.ParseWithClaims(tokenString, &RefreshClaims{}, func(token *jwt.Token) (interface{}, error) {
+			return s.jwtRefreshSecret, nil
+		})
+
+		if token != nil && token.Valid {
+			if refreshClaims, ok := token.Claims.(*RefreshClaims); ok {
+				claims = refreshClaims.StandardClaims
+			}
+		} else {
+			return errors.New("invalid token")
+		}
+	}
+
+	// 获取令牌 ID 和过期时间
+	jti := claims.Id
+	exp := time.Unix(claims.ExpiresAt, 0)
+
+	// 将令牌加入黑名单
+	ttl := exp.Sub(time.Now())
+	if ttl <= 0 {
+		return nil // 令牌已过期，无需撤销
+	}
+
+	return s.tokenRevoker.RevokeToken(jti, ttl)
+}
+
+// IsTokenRevoked 检查令牌是否被撤销
+func (s *authService) IsTokenRevoked(jti string) bool {
+	if s.tokenRevoker == nil {
+		return false
+	}
+	return s.tokenRevoker.IsRevoked(jti)
+}
+
+// GetUserPermissions 获取用户权限
+func (s *authService) GetUserPermissions(userID int64) ([]string, error) {
+	// 获取用户
+	user, err := s.userRepo.GetUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errors.New("user not found")
+	}
+
+	// 获取角色权限
+	permissions, err := s.permissionRepo.GetPermissionsByRoleID(user.RoleID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 验证Token是否有效
-	if !token.Valid {
-		return nil, errors.New("invalid token")
+	// 提取权限代码
+	permCodes := make([]string, len(permissions))
+	for i, p := range permissions {
+		permCodes[i] = p.Code
 	}
 
-	// 获取声明
-	claims, ok := token.Claims.(*Claims)
-	if !ok {
-		return nil, errors.New("invalid token claims")
-	}
-
-	return claims, nil
+	return permCodes, nil
 }
 
 // GetUserList 获取用户列表

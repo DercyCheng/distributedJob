@@ -2,96 +2,107 @@ package server
 
 import (
 	"context"
-	
-	"github.com/distributedJob/internal/service"
+
 	pb "github.com/distributedJob/internal/rpc/proto"
+	"github.com/distributedJob/internal/service"
 	"github.com/distributedJob/pkg/logger"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// AuthServiceServer implements the AuthService RPC service
+// AuthServiceServer implements the Auth gRPC service
 type AuthServiceServer struct {
 	pb.UnimplementedAuthServiceServer
 	authService service.AuthService
 }
 
-// NewAuthServiceServer creates a new AuthServiceServer
+// NewAuthServiceServer creates a new Auth service server
 func NewAuthServiceServer(authService service.AuthService) *AuthServiceServer {
-	return &AuthServiceServer{authService: authService}
+	return &AuthServiceServer{
+		authService: authService,
+	}
 }
 
-// Authenticate implements the Authenticate RPC method
+// Authenticate handles user authentication requests
 func (s *AuthServiceServer) Authenticate(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
-	token, err := s.authService.Login(req.Username, req.Password)
+	// Validate request
+	if req.Username == "" || req.Password == "" {
+		return nil, status.Error(codes.InvalidArgument, "username and password are required")
+	}
+
+	// Authenticate user
+	accessToken, _, user, err := s.authService.Login(req.Username, req.Password)
 	if err != nil {
-		logger.Errorf("Failed to authenticate user via RPC: %v", err)
+		logger.Error("Authentication failed", "error", err, "username", req.Username)
 		return &pb.AuthResponse{
 			Success: false,
-			Message: err.Error(),
+			Message: "Authentication failed: " + err.Error(),
 		}, nil
 	}
-	
-	// For the response, we need a userID but don't have it from the interface
-	// We can try to get it from the token validation
-	claims, err := s.authService.ValidateToken(token)
-	var userID int64
-	if err == nil && claims != nil {
-		userID = claims.UserID
-	}
-	
+
+	// Return successful response with token
+	// Note: We only return the access token via gRPC, refresh tokens are only handled through HTTP cookies
 	return &pb.AuthResponse{
-		Token:   token,
-		UserId:  userID, // Keep as int64
+		Token:   accessToken,
+		UserId:  user.ID,
 		Success: true,
 		Message: "Authentication successful",
 	}, nil
 }
 
-// ValidateToken implements the ValidateToken RPC method
+// ValidateToken validates a JWT token
 func (s *AuthServiceServer) ValidateToken(ctx context.Context, req *pb.TokenRequest) (*pb.TokenValidationResponse, error) {
-	claims, err := s.authService.ValidateToken(req.Token)
+	// Validate request
+	if req.Token == "" {
+		return nil, status.Error(codes.InvalidArgument, "token is required")
+	}
+
+	// Validate token
+	userID, err := s.authService.ValidateToken(req.Token)
 	if err != nil {
+		logger.Debug("Token validation failed", "error", err)
 		return &pb.TokenValidationResponse{
 			Valid: false,
 		}, nil
 	}
-	
-	// Since Claims contains UserID, we can access it directly
+
+	// Get user permissions
+	permissions, err := s.authService.GetUserPermissions(userID)
+	if err != nil {
+		logger.Error("Failed to get user permissions", "error", err, "userID", userID)
+		return &pb.TokenValidationResponse{
+			Valid:  true,
+			UserId: userID,
+		}, nil
+	}
+
+	// Return validation response
 	return &pb.TokenValidationResponse{
 		Valid:       true,
-		UserId:      claims.UserID, // Keep as int64
-		// We would need to get permissions separately, but since we don't have a direct method
-		// in the service interface, we'll leave this empty for now
-		Permissions: []string{},
+		UserId:      userID,
+		Permissions: permissions,
 	}, nil
 }
 
-// GetUserPermissions implements the GetUserPermissions RPC method
+// GetUserPermissions gets permissions for a user
 func (s *AuthServiceServer) GetUserPermissions(ctx context.Context, req *pb.UserRequest) (*pb.PermissionsResponse, error) {
-	// Since there's no direct method to get all permissions for a user in the AuthService interface,
-	// we'll need to use other methods to synthesize this functionality
-	
-	// First get all available permissions
-	permissionList, err := s.authService.GetPermissionList()
+	// Validate request
+	if req.UserId <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "valid user_id is required")
+	}
+
+	// Get user permissions
+	permissions, err := s.authService.GetUserPermissions(req.UserId)
 	if err != nil {
-		logger.Errorf("Failed to get permission list via RPC: %v", err)
+		logger.Error("Failed to get user permissions", "error", err, "userID", req.UserId)
 		return &pb.PermissionsResponse{
 			Success: false,
 		}, nil
 	}
-	
-	// Use userID directly without parsing
-	userID := req.UserId
-	
-	var userPermissions []string
-	for _, perm := range permissionList {
-		hasPermission, err := s.authService.HasPermission(userID, perm.Code)
-		if err == nil && hasPermission {
-			userPermissions = append(userPermissions, perm.Code)
-		}
-	}
-	
+
+	// Return permissions
 	return &pb.PermissionsResponse{
-		Permissions: userPermissions,
+		Permissions: permissions,
 		Success:     true,
 	}, nil
 }

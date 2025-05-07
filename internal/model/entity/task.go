@@ -8,7 +8,7 @@ type Task struct {
 	Name                string    `json:"name" gorm:"type:varchar(255);not null"`
 	DepartmentID        int64     `json:"departmentId" gorm:"column:department_id;not null;index:idx_department_id"`
 	TaskType            string    `json:"taskType" gorm:"column:task_type;type:varchar(20);not null;default:HTTP;index:idx_task_type"`
-	Cron                string    `json:"cron" gorm:"type:varchar(100);not null"`
+	Cron                string    `json:"cron" gorm:"column:cron_expression;type:varchar(100);not null"`
 	URL                 string    `json:"url" gorm:"type:varchar(500)"`
 	HTTPMethod          string    `json:"httpMethod" gorm:"column:http_method;type:varchar(10);default:GET"`
 	Body                string    `json:"body" gorm:"type:text"`
@@ -27,8 +27,8 @@ type Task struct {
 	CreateBy            int64     `json:"createBy" gorm:"column:create_by;not null"`
 	UpdateBy            *int64    `json:"updateBy" gorm:"column:update_by"`
 	// Additional fields for task scheduling
-	LastExecuteTime     *time.Time `json:"lastExecuteTime" gorm:"-"`
-	NextExecuteTime     *time.Time `json:"nextExecuteTime" gorm:"-"`
+	LastExecuteTime *time.Time `json:"lastExecuteTime" gorm:"-"`
+	NextExecuteTime *time.Time `json:"nextExecuteTime" gorm:"-"`
 }
 
 // TableName 指定表名

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -73,12 +74,12 @@ func (s *RPCServer) Start() error {
 	}
 
 	logger.Infof("RPC server listening on %s", addr)
-	
+
 	// Start serving (blocking call)
 	if err := s.server.Serve(lis); err != nil {
 		return fmt.Errorf("failed to serve: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -105,14 +106,39 @@ func (s *RPCServer) registerServices() {
 	// Register the task scheduler service
 	taskSchedulerServer := NewTaskSchedulerServer(s.scheduler)
 	pb.RegisterTaskSchedulerServer(s.server, taskSchedulerServer)
-	
+
 	// Register the auth service
 	authServiceServer := NewAuthServiceServer(s.authService)
 	pb.RegisterAuthServiceServer(s.server, authServiceServer)
-	
+
 	// Register the data service
 	dataServiceServer := NewDataServiceServer(s.taskService)
 	pb.RegisterDataServiceServer(s.server, dataServiceServer)
-	
+
 	logger.Info("Registered all RPC services")
+}
+
+// GetClientConnection returns a gRPC client connection to this server
+func GetClientConnection(target string, timeout time.Duration) (*grpc.ClientConn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Configure dial options
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second, // Send pings every 10 seconds if there is no activity
+			Timeout:             3 * time.Second,  // Wait 3 seconds for ping ack before considering the connection dead
+			PermitWithoutStream: true,             // Send pings even without active streams
+		}),
+	}
+
+	// Connect to the server
+	conn, err := grpc.DialContext(ctx, target, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %s: %v", target, err)
+	}
+
+	return conn, nil
 }

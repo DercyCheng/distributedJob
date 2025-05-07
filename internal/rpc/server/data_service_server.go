@@ -4,163 +4,134 @@ import (
 	"context"
 	"time"
 
-	"github.com/distributedJob/internal/service"
 	pb "github.com/distributedJob/internal/rpc/proto"
+	"github.com/distributedJob/internal/service"
 	"github.com/distributedJob/pkg/logger"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// DataServiceServer implements the DataService RPC service
+// DataServiceServer implements the DataService gRPC service
 type DataServiceServer struct {
 	pb.UnimplementedDataServiceServer
 	taskService service.TaskService
 }
 
-// NewDataServiceServer creates a new DataServiceServer
+// NewDataServiceServer creates a new DataService server
 func NewDataServiceServer(taskService service.TaskService) *DataServiceServer {
-	return &DataServiceServer{taskService: taskService}
+	return &DataServiceServer{
+		taskService: taskService,
+	}
 }
 
-// GetTaskHistory implements the GetTaskHistory RPC method
+// GetTaskHistory retrieves the execution history for a task
 func (s *DataServiceServer) GetTaskHistory(ctx context.Context, req *pb.TaskHistoryRequest) (*pb.TaskHistoryResponse, error) {
-	// Parse time strings to time.Time
-	startTime, err := time.Parse(time.RFC3339, req.StartTime)
+	// Validate request
+	if req.TaskId <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "valid task_id is required")
+	}
+
+	// Parse time parameters
+	var startTime, endTime time.Time
+	var err error
+
+	if req.StartTime != "" {
+		startTime, err = time.Parse(time.RFC3339, req.StartTime)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid start_time format, use RFC3339")
+		}
+	} else {
+		// Default to 7 days ago if not specified
+		startTime = time.Now().AddDate(0, 0, -7)
+	}
+
+	if req.EndTime != "" {
+		endTime, err = time.Parse(time.RFC3339, req.EndTime)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid end_time format, use RFC3339")
+		}
+	} else {
+		// Default to now if not specified
+		endTime = time.Now()
+	}
+
+	// Set default limit and offset if not provided
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 10
+	}
+	offset := int(req.Offset)
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get task history
+	records, total, err := s.taskService.GetTaskRecords(req.TaskId, startTime, endTime, limit, offset)
 	if err != nil {
-		logger.Errorf("Failed to parse start time: %v", err)
+		logger.Error("Failed to get task history", "error", err, "taskID", req.TaskId)
 		return &pb.TaskHistoryResponse{
 			Success: false,
 		}, nil
 	}
-	
-	endTime, err := time.Parse(time.RFC3339, req.EndTime)
-	if err != nil {
-		logger.Errorf("Failed to parse end time: %v", err)
-		return &pb.TaskHistoryResponse{
-			Success: false,
-		}, nil
-	}
-	
-	// Extract year and month for record lookup
-	year, month, _ := startTime.Date()
-	
-	// Get task ID
-	taskID := req.TaskId
-	
-	// Retrieve records from service
-	records, total, err := s.taskService.GetRecordListByTimeRange(
-		year, 
-		int(month),
-		&taskID, 
-		nil, // departmentID 
-		nil, // success
-		int(req.Offset/req.Limit + 1), // page
-		int(req.Limit), // size
-		startTime,
-		endTime,
-	)
-	
-	if err != nil {
-		logger.Errorf("Failed to get task history via RPC: %v", err)
-		return &pb.TaskHistoryResponse{
-			Success: false,
-		}, nil
-	}
-	
-	// Convert records to the response format
-	var protoRecords []*pb.TaskRecord
-	for _, record := range records {
-		// Create task record response
-		taskRecord := &pb.TaskRecord{
+
+	// Convert to protobuf response
+	pbRecords := make([]*pb.TaskRecord, len(records))
+	for i, record := range records {
+		executeTime := record.CreateTime.Format(time.RFC3339)
+
+		pbRecords[i] = &pb.TaskRecord{
 			Id:          record.ID,
 			TaskId:      record.TaskID,
 			TaskName:    record.TaskName,
-			ExecuteTime: record.CreateTime.Format(time.RFC3339),
+			ExecuteTime: executeTime,
 			Success:     record.Success == 1,
 			Result:      record.Response,
+			Error:       record.Response, // Using Response field since there's no dedicated Error field
 		}
-		
-		// If task failed, include error information
-		if record.Success == 0 {
-			// Use Response as the error message when task failed
-			// or we could use a different field based on your business logic
-			taskRecord.Error = record.Response
-		}
-		
-		protoRecords = append(protoRecords, taskRecord)
 	}
-	
+
 	return &pb.TaskHistoryResponse{
-		Records: protoRecords,
+		Records: pbRecords,
 		Total:   total,
 		Success: true,
 	}, nil
 }
 
-// GetStatistics implements the GetStatistics RPC method
+// GetStatistics retrieves statistics for tasks
 func (s *DataServiceServer) GetStatistics(ctx context.Context, req *pb.StatisticsRequest) (*pb.StatisticsResponse, error) {
-	// Convert period string to time range
-	now := time.Now()
-	var year, month int
-	var departmentID *int64 = nil
-	
-	if req.DepartmentId > 0 {
-		deptID := req.DepartmentId
-		departmentID = &deptID
-	}
-	
-	// Set period based on request
+	// Determine time range based on period
+	var startTime time.Time
+	endTime := time.Now()
+
 	switch req.Period {
 	case "daily":
-		year = now.Year()
-		month = int(now.Month())
+		startTime = time.Now().AddDate(0, 0, -1)
 	case "weekly":
-		year = now.Year()
-		month = int(now.Month())
+		startTime = time.Now().AddDate(0, 0, -7)
 	case "monthly":
-		year = now.Year()
-		month = int(now.Month())
+		startTime = time.Now().AddDate(0, -1, 0)
 	default:
-		year = now.Year()
-		month = int(now.Month())
+		// Default to last 7 days
+		startTime = time.Now().AddDate(0, 0, -7)
 	}
-	
-	// Get statistics from service
-	stats, err := s.taskService.GetRecordStats(year, month, nil, departmentID)
+
+	// Get statistics
+	stats, err := s.taskService.GetTaskStatistics(req.DepartmentId, startTime, endTime)
 	if err != nil {
-		logger.Errorf("Failed to get statistics via RPC: %v", err)
-		return nil, err
+		logger.Error("Failed to get task statistics", "error", err, "departmentID", req.DepartmentId)
+		return &pb.StatisticsResponse{}, nil
 	}
-	
-	// Extract values from the stats map
-	taskCount := int32(0)
-	successRate := float32(0)
-	avgExecutionTime := float32(0)
+
+	// Prepare execution stats map
 	executionStats := make(map[string]float32)
-	
-	if count, ok := stats["taskCount"].(int); ok {
-		taskCount = int32(count)
+	for k, v := range stats.ExecutionStats {
+		executionStats[k] = float32(v)
 	}
-	
-	if rate, ok := stats["successRate"].(float64); ok {
-		successRate = float32(rate)
-	}
-	
-	if avgTime, ok := stats["avgExecutionTime"].(float64); ok {
-		avgExecutionTime = float32(avgTime)
-	}
-	
-	// Convert any additional statistics
-	if dailyStats, ok := stats["dailyStats"].(map[string]interface{}); ok {
-		for date, value := range dailyStats {
-			if floatValue, ok := value.(float64); ok {
-				executionStats[date] = float32(floatValue)
-			}
-		}
-	}
-	
+
 	return &pb.StatisticsResponse{
-		TaskCount:        taskCount,
-		SuccessRate:      successRate,
-		AvgExecutionTime: avgExecutionTime,
+		TaskCount:        int32(stats.TaskCount),
+		SuccessRate:      float32(stats.SuccessRate),
+		AvgExecutionTime: float32(stats.AvgExecutionTime),
 		ExecutionStats:   executionStats,
 	}, nil
 }

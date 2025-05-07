@@ -52,6 +52,14 @@
    - [项目结构](#前端项目结构)
    - [开发指南](#开发指南)
    - [构建与部署](#构建与部署)
+7. [令牌安全机制](#令牌安全机制)
+   - [概述](#令牌概述)
+   - [双令牌机制](#双令牌机制)
+   - [令牌撤销](#令牌撤销)
+   - [令牌内容优化](#令牌内容优化)
+   - [令牌传输安全](#令牌传输安全)
+   - [令牌刷新流程](#令牌刷新流程)
+   - [最佳实践](#令牌最佳实践)
 
 ---
 
@@ -1926,11 +1934,11 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
    func TestPauseTask(t *testing.T) {
        // 创建模拟对象
        mockRepo := new(MockTaskRepository)
-       
+
        // 创建调度器
        scheduler := job.NewScheduler(nil)
        scheduler.SetTaskRepository(mockRepo)
-       
+
        // 设置模拟任务
        taskID := int64(1)
        task := &entity.Task{
@@ -1940,17 +1948,17 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
            Status:   1,
            TaskType: "HTTP",
        }
-       
+
        // 设置模拟行为
        mockRepo.On("GetTaskByID", taskID).Return(task, nil)
        mockRepo.On("UpdateTaskStatus", taskID, int8(0)).Return(nil)
-       
+
        // 添加任务到调度器
        scheduler.AddTask(task)
-       
+
        // 执行测试
        err := scheduler.PauseTask(taskID)
-       
+
        // 验证结果
        assert.NoError(t, err)
        mockRepo.AssertExpectations(t)
@@ -2051,13 +2059,13 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
    func TestScheduleTask(t *testing.T) {
        // 创建模拟调度器
        mockScheduler := new(MockScheduler)
-       
+
        // 设置模拟行为
        mockScheduler.On("AddTaskAndStore", mock.AnythingOfType("*entity.Task")).Return(int64(1), nil)
-       
+
        // 创建RPC服务器
        taskServer := server.NewTaskSchedulerServer(mockScheduler)
-       
+
        // 创建请求
        req := &pb.ScheduleTaskRequest{
            Name:           "Test Task",
@@ -2066,10 +2074,10 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
            Params:         []byte(`{"url":"http://example.com"}`),
            MaxRetry:       3,
        }
-       
+
        // 执行测试
        resp, err := taskServer.ScheduleTask(context.Background(), req)
-       
+
        // 验证结果
        assert.NoError(t, err)
        assert.Equal(t, int64(1), resp.TaskId)
@@ -2268,16 +2276,16 @@ func TestCreateHttpTask(t *testing.T) {
     loginBody, _ := json.Marshal(loginPayload)
     loginReq := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(loginBody))
     loginReq.Header.Set("Content-Type", "application/json")
-    
+
     loginResp := httptest.NewRecorder()
     router.ServeHTTP(loginResp, loginReq)
-    
+
     assert.Equal(t, http.StatusOK, loginResp.Code)
-    
+
     var loginResult map[string]interface{}
     err := json.Unmarshal(loginResp.Body.Bytes(), &loginResult)
     assert.NoError(t, err)
-    
+
     data := loginResult["data"].(map[string]interface{})
     token := data["token"].(string)
 
@@ -2292,21 +2300,21 @@ func TestCreateHttpTask(t *testing.T) {
         "status":       1,
     }
     taskBody, _ := json.Marshal(taskPayload)
-    
+
     req := httptest.NewRequest("POST", "/v1/tasks/http", bytes.NewBuffer(taskBody))
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("Authorization", "Bearer "+token)
-    
+
     resp := httptest.NewRecorder()
     router.ServeHTTP(resp, req)
-    
+
     // 验证结果
     assert.Equal(t, http.StatusOK, resp.Code)
-    
+
     var result map[string]interface{}
     err = json.Unmarshal(resp.Body.Bytes(), &result)
     assert.NoError(t, err)
-    
+
     assert.Equal(t, float64(0), result["code"])
     assert.Equal(t, "success", result["message"])
     assert.NotNil(t, result["data"])
@@ -2466,8 +2474,8 @@ go tool cover -func=coverage.out
 
 1. **核心业务逻辑（服务层）**: 80%+
 2. **数据存储层**: 70%+
-3. **API层**: 60%+
-4. **RPC服务层**: 70%+
+3. **API 层**: 60%+
+4. **RPC 服务层**: 70%+
 5. **工具与辅助函数**: 50%+
 
 #### 核心业务测试重点
@@ -2475,24 +2483,28 @@ go tool cover -func=coverage.out
 针对 DistributedJob 的核心业务，测试应特别关注以下方面：
 
 1. **调度逻辑**
+
    - 任务添加/删除/暂停/恢复的正确性
    - Cron 表达式解析和执行时间计算
    - 并发任务处理
    - 任务重试机制
 
 2. **任务执行**
+
    - HTTP 任务的执行与结果处理
    - gRPC 任务的执行与结果处理
    - 失败重试策略
    - 备份机制激活
 
 3. **认证授权**
+
    - 用户认证流程
    - JWT 令牌生成与验证
    - 权限检查
    - 安全相关功能（密码哈希等）
 
 4. **数据一致性**
+
    - 任务状态同步
    - 执行记录与任务状态的一致性
    - 并发操作下的数据一致性
@@ -2517,9 +2529,9 @@ name: Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   test:
@@ -2538,24 +2550,24 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      
+
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.16
-      
+
       - name: Install dependencies
         run: go mod download
-      
+
       - name: Run unit tests
         run: go test -v ./internal/service/test/... ./internal/job/test/... ./internal/store/mysql/repository/test/... ./internal/rpc/server/test/...
-      
+
       - name: Run integration tests
         run: go test -v ./internal/test/integration/...
-      
+
       - name: Generate coverage report
         run: go test -coverprofile=coverage.out ./internal/...
-      
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
 ```
@@ -2668,44 +2680,44 @@ DistributedJob 前端应用主要包含以下功能模块：
 
 ```typescript
 // src/utils/token.ts
-const TokenKey = 'Admin-Token'
+const TokenKey = "Admin-Token";
 
 export function getToken(): string {
-  return localStorage.getItem(TokenKey) || ''
+  return localStorage.getItem(TokenKey) || "";
 }
 
 export function setToken(token: string): void {
-  return localStorage.setItem(TokenKey, token)
+  return localStorage.setItem(TokenKey, token);
 }
 
 export function removeToken(): void {
-  return localStorage.removeItem(TokenKey)
+  return localStorage.removeItem(TokenKey);
 }
 
 // src/api/auth.ts
-import request from './http'
-import { LoginData, UserInfo } from '../types'
+import request from "./http";
+import { LoginData, UserInfo } from "../types";
 
 export function login(data: LoginData) {
   return request({
-    url: '/auth/login',
-    method: 'post',
-    data
-  })
+    url: "/auth/login",
+    method: "post",
+    data,
+  });
 }
 
 export function getUserInfo() {
   return request({
-    url: '/auth/userinfo',
-    method: 'get'
-  })
+    url: "/auth/userinfo",
+    method: "get",
+  });
 }
 
 export function logout() {
   return request({
-    url: '/auth/logout',
-    method: 'post'
-  })
+    url: "/auth/logout",
+    method: "post",
+  });
 }
 ```
 
@@ -2749,7 +2761,9 @@ export function logout() {
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+                <el-dropdown-item @click="handleLogout"
+                  >退出登录</el-dropdown-item
+                >
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -2772,53 +2786,53 @@ export function logout() {
 
 ```typescript
 // src/api/task.ts
-import request from './http'
-import { TaskQuery, TaskData } from '../types'
+import request from "./http";
+import { TaskQuery, TaskData } from "../types";
 
 export function getTasks(params: TaskQuery) {
   return request({
-    url: '/tasks',
-    method: 'get',
-    params
-  })
+    url: "/tasks",
+    method: "get",
+    params,
+  });
 }
 
 export function getTaskById(id: number) {
   return request({
     url: `/tasks/${id}`,
-    method: 'get'
-  })
+    method: "get",
+  });
 }
 
 export function createHttpTask(data: TaskData) {
   return request({
-    url: '/tasks/http',
-    method: 'post',
-    data
-  })
+    url: "/tasks/http",
+    method: "post",
+    data,
+  });
 }
 
 export function createGrpcTask(data: TaskData) {
   return request({
-    url: '/tasks/grpc',
-    method: 'post',
-    data
-  })
+    url: "/tasks/grpc",
+    method: "post",
+    data,
+  });
 }
 
 export function updateTaskStatus(id: number, status: number) {
   return request({
     url: `/tasks/${id}/status`,
-    method: 'patch',
-    data: { status }
-  })
+    method: "patch",
+    data: { status },
+  });
 }
 
 export function deleteTask(id: number) {
   return request({
     url: `/tasks/${id}`,
-    method: 'delete'
-  })
+    method: "delete",
+  });
 }
 ```
 
@@ -2836,10 +2850,18 @@ export function deleteTask(id: number) {
     <div class="filter-container">
       <el-form :inline="true" :model="queryParams" class="demo-form-inline">
         <el-form-item label="任务ID">
-          <el-input v-model="queryParams.taskId" placeholder="任务ID" clearable />
+          <el-input
+            v-model="queryParams.taskId"
+            placeholder="任务ID"
+            clearable
+          />
         </el-form-item>
         <el-form-item label="部门">
-          <el-select v-model="queryParams.departmentId" placeholder="所属部门" clearable>
+          <el-select
+            v-model="queryParams.departmentId"
+            placeholder="所属部门"
+            clearable
+          >
             <el-option
               v-for="dept in departmentOptions"
               :key="dept.id"
@@ -2849,7 +2871,11 @@ export function deleteTask(id: number) {
           </el-select>
         </el-form-item>
         <el-form-item label="执行状态">
-          <el-select v-model="queryParams.success" placeholder="执行状态" clearable>
+          <el-select
+            v-model="queryParams.success"
+            placeholder="执行状态"
+            clearable
+          >
             <el-option label="成功" :value="1" />
             <el-option label="失败" :value="0" />
           </el-select>
@@ -2888,24 +2914,42 @@ export function deleteTask(id: number) {
     >
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="记录ID" prop="id" width="80" align="center" />
-      <el-table-column label="任务名称" prop="taskName" min-width="150" show-overflow-tooltip />
-      <el-table-column label="所属部门" prop="departmentName" width="120" align="center" />
-      <el-table-column label="开始时间" prop="startTime" width="180" align="center" />
-      <el-table-column label="结束时间" prop="endTime" width="180" align="center" />
+      <el-table-column
+        label="任务名称"
+        prop="taskName"
+        min-width="150"
+        show-overflow-tooltip
+      />
+      <el-table-column
+        label="所属部门"
+        prop="departmentName"
+        width="120"
+        align="center"
+      />
+      <el-table-column
+        label="开始时间"
+        prop="startTime"
+        width="180"
+        align="center"
+      />
+      <el-table-column
+        label="结束时间"
+        prop="endTime"
+        width="180"
+        align="center"
+      />
       <el-table-column label="状态" align="center" width="100">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-            {{ row.status === 1 ? '成功' : '失败' }}
+            {{ row.status === 1 ? "成功" : "失败" }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" align="center" width="150">
         <template #default="{ row }">
-          <el-button
-            size="small"
-            type="primary"
-            @click="handleViewDetail(row)"
-          >查看详情</el-button>
+          <el-button size="small" type="primary" @click="handleViewDetail(row)"
+            >查看详情</el-button
+          >
         </template>
       </el-table-column>
     </el-table>
@@ -2922,12 +2966,12 @@ export function deleteTask(id: number) {
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, reactive, toRefs } from 'vue'
-import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts/core'
-import { getRecordList, getRecordStats } from '@/api/record'
-import { getDepartments } from '@/api/department'
-import Pagination from '@/components/common/Pagination.vue'
+import { ref, onMounted, reactive, toRefs } from "vue";
+import { ElMessage } from "element-plus";
+import * as echarts from "echarts/core";
+import { getRecordList, getRecordStats } from "@/api/record";
+import { getDepartments } from "@/api/department";
+import Pagination from "@/components/common/Pagination.vue";
 
 // 查询条件
 const queryState = reactive({
@@ -2938,117 +2982,127 @@ const queryState = reactive({
     departmentId: undefined,
     success: undefined,
     year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1
+    month: new Date().getMonth() + 1,
   },
   dateRange: [],
   departmentOptions: [],
   recordList: [],
   total: 0,
   loading: false,
-  selectedRows: []
-})
+  selectedRows: [],
+});
 
-const { queryParams, dateRange, departmentOptions, recordList, total, loading, selectedRows } = toRefs(queryState)
+const {
+  queryParams,
+  dateRange,
+  departmentOptions,
+  recordList,
+  total,
+  loading,
+  selectedRows,
+} = toRefs(queryState);
 
 // 查询方法
 const getList = async () => {
-  queryState.loading = true
+  queryState.loading = true;
   try {
-    const { data } = await getRecordList(queryParams.value)
-    queryState.recordList = data.list
-    queryState.total = data.total
-    initChart()
+    const { data } = await getRecordList(queryParams.value);
+    queryState.recordList = data.list;
+    queryState.total = data.total;
+    initChart();
   } catch (error) {
-    ElMessage.error('获取记录列表失败')
+    ElMessage.error("获取记录列表失败");
   } finally {
-    queryState.loading = false
+    queryState.loading = false;
   }
-}
+};
 
 // 初始化图表
-const executionChart = ref<HTMLDivElement | null>(null)
-const chartInstance = ref<echarts.ECharts | null>(null)
+const executionChart = ref<HTMLDivElement | null>(null);
+const chartInstance = ref<echarts.ECharts | null>(null);
 
 const initChart = async () => {
-  if (!executionChart.value) return
-  
+  if (!executionChart.value) return;
+
   try {
     const { data } = await getRecordStats({
       taskId: queryParams.value.taskId,
       departmentId: queryParams.value.departmentId,
       year: queryParams.value.year,
-      month: queryParams.value.month
-    })
-    
+      month: queryParams.value.month,
+    });
+
     if (!chartInstance.value) {
-      chartInstance.value = echarts.init(executionChart.value)
+      chartInstance.value = echarts.init(executionChart.value);
     }
-    
+
     chartInstance.value.setOption({
       title: {
-        text: '任务执行统计'
+        text: "任务执行统计",
       },
       tooltip: {
-        trigger: 'axis'
+        trigger: "axis",
       },
       legend: {
-        data: ['成功次数', '失败次数', '成功率']
+        data: ["成功次数", "失败次数", "成功率"],
       },
       xAxis: {
-        type: 'category',
-        data: data.dates
+        type: "category",
+        data: data.dates,
       },
       yAxis: [
         {
-          type: 'value',
-          name: '次数',
-          position: 'left'
+          type: "value",
+          name: "次数",
+          position: "left",
         },
         {
-          type: 'value',
-          name: '成功率',
+          type: "value",
+          name: "成功率",
           min: 0,
           max: 100,
-          position: 'right',
+          position: "right",
           axisLabel: {
-            formatter: '{value}%'
-          }
-        }
+            formatter: "{value}%",
+          },
+        },
       ],
       series: [
         {
-          name: '成功次数',
-          type: 'bar',
-          stack: '总量',
-          data: data.success
+          name: "成功次数",
+          type: "bar",
+          stack: "总量",
+          data: data.success,
         },
         {
-          name: '失败次数',
-          type: 'bar',
-          stack: '总量',
-          data: data.fail
+          name: "失败次数",
+          type: "bar",
+          stack: "总量",
+          data: data.fail,
         },
         {
-          name: '成功率',
-          type: 'line',
+          name: "成功率",
+          type: "line",
           yAxisIndex: 1,
-          data: data.successRate.map((rate: number) => parseFloat(rate.toFixed(2))),
+          data: data.successRate.map((rate: number) =>
+            parseFloat(rate.toFixed(2))
+          ),
           markLine: {
-            data: [{ type: 'average', name: '平均成功率' }]
-          }
-        }
-      ]
-    })
+            data: [{ type: "average", name: "平均成功率" }],
+          },
+        },
+      ],
+    });
   } catch (error) {
-    ElMessage.error('获取统计数据失败')
+    ElMessage.error("获取统计数据失败");
   }
-}
+};
 
 // 处理查询
 const handleQuery = () => {
-  queryParams.value.page = 1
-  getList()
-}
+  queryParams.value.page = 1;
+  getList();
+};
 
 // 重置查询
 const resetQuery = () => {
@@ -3059,50 +3113,52 @@ const resetQuery = () => {
     departmentId: undefined,
     success: undefined,
     year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1
-  }
-  dateRange.value = []
-  getList()
-}
+    month: new Date().getMonth() + 1,
+  };
+  dateRange.value = [];
+  getList();
+};
 
 // 处理日期范围变化
 const handleDateRangeChange = () => {
   if (dateRange.value && dateRange.value.length === 2) {
-    const [start, end] = dateRange.value
-    const startDate = new Date(start)
-    queryParams.value.year = startDate.getFullYear()
-    queryParams.value.month = startDate.getMonth() + 1
+    const [start, end] = dateRange.value;
+    const startDate = new Date(start);
+    queryParams.value.year = startDate.getFullYear();
+    queryParams.value.month = startDate.getMonth() + 1;
   }
-}
+};
 
 // 查看详情
 const handleViewDetail = (row: any) => {
-  router.push(`/record/detail/${row.id}?year=${queryParams.value.year}&month=${queryParams.value.month}`)
-}
+  router.push(
+    `/record/detail/${row.id}?year=${queryParams.value.year}&month=${queryParams.value.month}`
+  );
+};
 
 // 加载部门列表
 const loadDepartments = async () => {
   try {
-    const { data } = await getDepartments()
-    queryState.departmentOptions = data
+    const { data } = await getDepartments();
+    queryState.departmentOptions = data;
   } catch (error) {
-    ElMessage.error('获取部门列表失败')
+    ElMessage.error("获取部门列表失败");
   }
-}
+};
 
 // 选择行变化
 const handleSelectionChange = (selection: any[]) => {
-  queryState.selectedRows = selection
-}
+  queryState.selectedRows = selection;
+};
 
 // 初始化
 onMounted(() => {
-  loadDepartments()
-  getList()
-  window.addEventListener('resize', () => {
-    chartInstance.value?.resize()
-  })
-})
+  loadDepartments();
+  getList();
+  window.addEventListener("resize", () => {
+    chartInstance.value?.resize();
+  });
+});
 </script>
 ```
 
@@ -3116,44 +3172,44 @@ onMounted(() => {
 
 ```typescript
 // src/api/department.ts
-import request from './http'
+import request from "./http";
 
 export function getDepartments(params: any) {
   return request({
-    url: '/departments',
-    method: 'get',
-    params
-  })
+    url: "/departments",
+    method: "get",
+    params,
+  });
 }
 
 export function getDepartmentById(id: number) {
   return request({
     url: `/departments/${id}`,
-    method: 'get'
-  })
+    method: "get",
+  });
 }
 
 export function createDepartment(data: any) {
   return request({
-    url: '/departments',
-    method: 'post',
-    data
-  })
+    url: "/departments",
+    method: "post",
+    data,
+  });
 }
 
 export function updateDepartment(id: number, data: any) {
   return request({
     url: `/departments/${id}`,
-    method: 'put',
-    data
-  })
+    method: "put",
+    data,
+  });
 }
 
 export function deleteDepartment(id: number) {
   return request({
     url: `/departments/${id}`,
-    method: 'delete'
-  })
+    method: "delete",
+  });
 }
 ```
 
@@ -3171,7 +3227,11 @@ export function deleteDepartment(id: number) {
     <div class="filter-container">
       <el-form :inline="true" :model="queryParams">
         <el-form-item label="角色名称">
-          <el-input v-model="queryParams.keyword" placeholder="角色名称" clearable />
+          <el-input
+            v-model="queryParams.keyword"
+            placeholder="角色名称"
+            clearable
+          />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleQuery">查询</el-button>
@@ -3190,29 +3250,42 @@ export function deleteDepartment(id: number) {
     >
       <el-table-column label="角色ID" prop="id" width="80" align="center" />
       <el-table-column label="角色名称" prop="name" min-width="120" />
-      <el-table-column label="描述" prop="description" min-width="180" show-overflow-tooltip />
+      <el-table-column
+        label="描述"
+        prop="description"
+        min-width="180"
+        show-overflow-tooltip
+      />
       <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'">
-            {{ row.status === 1 ? '启用' : '禁用' }}
+            {{ row.status === 1 ? "启用" : "禁用" }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" prop="createTime" width="180" align="center" />
-      <el-table-column label="更新时间" prop="updateTime" width="180" align="center" />
+      <el-table-column
+        label="创建时间"
+        prop="createTime"
+        width="180"
+        align="center"
+      />
+      <el-table-column
+        label="更新时间"
+        prop="updateTime"
+        width="180"
+        align="center"
+      />
       <el-table-column label="操作" align="center" width="250">
         <template #default="{ row }">
-          <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
-          <el-button 
-            size="small" 
-            type="success" 
-            @click="handlePermission(row)"
-          >分配权限</el-button>
-          <el-button 
-            size="small" 
-            type="danger" 
-            @click="handleDelete(row)"
-          >删除</el-button>
+          <el-button size="small" type="primary" @click="handleEdit(row)"
+            >编辑</el-button
+          >
+          <el-button size="small" type="success" @click="handlePermission(row)"
+            >分配权限</el-button
+          >
+          <el-button size="small" type="danger" @click="handleDelete(row)"
+            >删除</el-button
+          >
         </template>
       </el-table-column>
     </el-table>
@@ -3227,7 +3300,7 @@ export function deleteDepartment(id: number) {
 
     <!-- 添加/编辑角色对话框 -->
     <el-dialog :title="dialogTitle" v-model="dialogVisible" width="500px">
-      <el-form 
+      <el-form
         ref="roleFormRef"
         :model="roleForm"
         :rules="rules"
@@ -3237,9 +3310,9 @@ export function deleteDepartment(id: number) {
           <el-input v-model="roleForm.name" placeholder="请输入角色名称" />
         </el-form-item>
         <el-form-item label="角色描述" prop="description">
-          <el-input 
-            v-model="roleForm.description" 
-            type="textarea" 
+          <el-input
+            v-model="roleForm.description"
+            type="textarea"
             placeholder="请输入角色描述"
           />
         </el-form-item>
@@ -3259,11 +3332,7 @@ export function deleteDepartment(id: number) {
     </el-dialog>
 
     <!-- 权限分配对话框 -->
-    <el-dialog 
-      title="分配权限" 
-      v-model="permissionDialogVisible" 
-      width="600px"
-    >
+    <el-dialog title="分配权限" v-model="permissionDialogVisible" width="600px">
       <el-tree
         ref="permissionTreeRef"
         :data="permissionTree"
@@ -3314,7 +3383,10 @@ export function deleteDepartment(id: number) {
       <el-col :xs="24" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="card-panel">
-            <div class="card-panel-icon-wrapper" style="background: rgba(0,199,139,0.1)">
+            <div
+              class="card-panel-icon-wrapper"
+              style="background: rgba(0,199,139,0.1)"
+            >
               <el-icon class="card-panel-icon" style="color: #00C78B">
                 <check-circle />
               </el-icon>
@@ -3329,7 +3401,10 @@ export function deleteDepartment(id: number) {
       <el-col :xs="24" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="card-panel">
-            <div class="card-panel-icon-wrapper" style="background: rgba(238,99,99,0.1)">
+            <div
+              class="card-panel-icon-wrapper"
+              style="background: rgba(238,99,99,0.1)"
+            >
               <el-icon class="card-panel-icon" style="color: #EE6363">
                 <warning />
               </el-icon>
@@ -3344,7 +3419,10 @@ export function deleteDepartment(id: number) {
       <el-col :xs="24" :sm="12" :md="6">
         <el-card class="stat-card">
           <div class="card-panel">
-            <div class="card-panel-icon-wrapper" style="background: rgba(84,112,198,0.1)">
+            <div
+              class="card-panel-icon-wrapper"
+              style="background: rgba(84,112,198,0.1)"
+            >
               <el-icon class="card-panel-icon" style="color: #5470C6">
                 <user />
               </el-icon>
@@ -3370,7 +3448,7 @@ export function deleteDepartment(id: number) {
           <div ref="executionPieChart" style="width: 100%; height: 350px"></div>
         </el-card>
       </el-col>
-      
+
       <!-- 执行趋势图表 -->
       <el-col :xs="24" :sm="24" :md="12">
         <el-card>
@@ -3391,11 +3469,12 @@ export function deleteDepartment(id: number) {
           <template #header>
             <div class="card-header">
               <span>最近执行记录</span>
-              <el-button 
-                class="more-button" 
+              <el-button
+                class="more-button"
                 text
                 @click="router.push('/record/list')"
-              >查看更多</el-button>
+                >查看更多</el-button
+              >
             </div>
           </template>
           <el-table
@@ -3403,15 +3482,30 @@ export function deleteDepartment(id: number) {
             style="width: 100%"
             :row-class-name="tableRowClassName"
           >
-            <el-table-column label="任务名称" prop="taskName" min-width="150" show-overflow-tooltip />
-            <el-table-column label="任务类型" prop="taskType" width="100" align="center">
+            <el-table-column
+              label="任务名称"
+              prop="taskName"
+              min-width="150"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              label="任务类型"
+              prop="taskType"
+              width="100"
+              align="center"
+            >
               <template #default="{ row }">
                 <el-tag :type="row.taskType === 'HTTP' ? 'success' : 'warning'">
                   {{ row.taskType }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="执行时间" prop="startTime" width="180" align="center" />
+            <el-table-column
+              label="执行时间"
+              prop="startTime"
+              width="180"
+              align="center"
+            />
             <el-table-column label="执行耗时" width="120" align="center">
               <template #default="{ row }">
                 {{ calculateDuration(row.startTime, row.endTime) }}
@@ -3420,17 +3514,18 @@ export function deleteDepartment(id: number) {
             <el-table-column label="状态" width="100" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-                  {{ row.status === 1 ? '成功' : '失败' }}
+                  {{ row.status === 1 ? "成功" : "失败" }}
                 </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="120" align="center">
               <template #default="{ row }">
-                <el-button 
-                  size="small" 
-                  type="primary" 
+                <el-button
+                  size="small"
+                  type="primary"
                   @click="viewRecordDetail(row)"
-                >查看详情</el-button>
+                  >查看详情</el-button
+                >
               </template>
             </el-table-column>
           </el-table>
@@ -3441,14 +3536,14 @@ export function deleteDepartment(id: number) {
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, reactive, toRefs, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
-import * as echarts from 'echarts/core'
-import { getDashboardStats } from '@/api/dashboard'
-import { getRecentRecords } from '@/api/record'
-import { formatDate, diffTime } from '@/utils/date'
+import { ref, onMounted, reactive, toRefs, onBeforeUnmount } from "vue";
+import { useRouter } from "vue-router";
+import * as echarts from "echarts/core";
+import { getDashboardStats } from "@/api/dashboard";
+import { getRecentRecords } from "@/api/record";
+import { formatDate, diffTime } from "@/utils/date";
 
-const router = useRouter()
+const router = useRouter();
 
 // 仪表盘数据
 const state = reactive({
@@ -3456,200 +3551,216 @@ const state = reactive({
     totalTasks: 0,
     runningTasks: 0,
     failedTasks: 0,
-    totalUsers: 0
+    totalUsers: 0,
   },
-  recentRecords: []
-})
+  recentRecords: [],
+});
 
-const { dashboardData, recentRecords } = toRefs(state)
+const { dashboardData, recentRecords } = toRefs(state);
 
 // 图表引用
-const executionPieChart = ref<HTMLDivElement | null>(null)
-const trendLineChart = ref<HTMLDivElement | null>(null)
-const pieChartInstance = ref<echarts.ECharts | null>(null)
-const lineChartInstance = ref<echarts.ECharts | null>(null)
+const executionPieChart = ref<HTMLDivElement | null>(null);
+const trendLineChart = ref<HTMLDivElement | null>(null);
+const pieChartInstance = ref<echarts.ECharts | null>(null);
+const lineChartInstance = ref<echarts.ECharts | null>(null);
 
 // 加载仪表盘数据
 const loadDashboardData = async () => {
   try {
-    const { data } = await getDashboardStats()
-    state.dashboardData = data.stats
-    
+    const { data } = await getDashboardStats();
+    state.dashboardData = data.stats;
+
     // 加载最近记录
-    const recordResponse = await getRecentRecords({ limit: 10 })
-    state.recentRecords = recordResponse.data.records
-    
+    const recordResponse = await getRecentRecords({ limit: 10 });
+    state.recentRecords = recordResponse.data.records;
+
     // 初始化图表
-    initPieChart(data.execution)
-    initLineChart(data.trend)
+    initPieChart(data.execution);
+    initLineChart(data.trend);
   } catch (error) {
-    console.error('加载仪表盘数据失败:', error)
+    console.error("加载仪表盘数据失败:", error);
   }
-}
+};
 
 // 初始化饼图
 const initPieChart = (data: any) => {
-  if (!executionPieChart.value) return
-  
-  pieChartInstance.value = echarts.init(executionPieChart.value)
-  
+  if (!executionPieChart.value) return;
+
+  pieChartInstance.value = echarts.init(executionPieChart.value);
+
   pieChartInstance.value.setOption({
     tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
+      trigger: "item",
+      formatter: "{a} <br/>{b}: {c} ({d}%)",
     },
     legend: {
-      orient: 'vertical',
-      left: 'left',
-      data: ['成功', '失败', '超时', '其他异常']
+      orient: "vertical",
+      left: "left",
+      data: ["成功", "失败", "超时", "其他异常"],
     },
     series: [
       {
-        name: '执行情况',
-        type: 'pie',
-        radius: ['50%', '70%'],
+        name: "执行情况",
+        type: "pie",
+        radius: ["50%", "70%"],
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
-          borderColor: '#fff',
-          borderWidth: 2
+          borderColor: "#fff",
+          borderWidth: 2,
         },
         label: {
           show: false,
-          position: 'center'
+          position: "center",
         },
         emphasis: {
           label: {
             show: true,
-            fontSize: '16',
-            fontWeight: 'bold'
-          }
+            fontSize: "16",
+            fontWeight: "bold",
+          },
         },
         labelLine: {
-          show: false
+          show: false,
         },
         data: [
-          { value: data.success, name: '成功', itemStyle: { color: '#00C78B' } },
-          { value: data.fail, name: '失败', itemStyle: { color: '#EE6363' } },
-          { value: data.timeout, name: '超时', itemStyle: { color: '#FF9900' } },
-          { value: data.error, name: '其他异常', itemStyle: { color: '#909399' } }
-        ]
-      }
-    ]
-  })
-}
+          {
+            value: data.success,
+            name: "成功",
+            itemStyle: { color: "#00C78B" },
+          },
+          { value: data.fail, name: "失败", itemStyle: { color: "#EE6363" } },
+          {
+            value: data.timeout,
+            name: "超时",
+            itemStyle: { color: "#FF9900" },
+          },
+          {
+            value: data.error,
+            name: "其他异常",
+            itemStyle: { color: "#909399" },
+          },
+        ],
+      },
+    ],
+  });
+};
 
 // 初始化趋势图
 const initLineChart = (data: any) => {
-  if (!trendLineChart.value) return
-  
-  lineChartInstance.value = echarts.init(trendLineChart.value)
-  
+  if (!trendLineChart.value) return;
+
+  lineChartInstance.value = echarts.init(trendLineChart.value);
+
   lineChartInstance.value.setOption({
     tooltip: {
-      trigger: 'axis'
+      trigger: "axis",
     },
     legend: {
-      data: ['总执行次数', '成功次数', '失败次数']
+      data: ["总执行次数", "成功次数", "失败次数"],
     },
     grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
+      left: "3%",
+      right: "4%",
+      bottom: "3%",
+      containLabel: true,
     },
     xAxis: {
-      type: 'category',
+      type: "category",
       boundaryGap: false,
-      data: data.dates
+      data: data.dates,
     },
     yAxis: {
-      type: 'value'
+      type: "value",
     },
     series: [
       {
-        name: '总执行次数',
-        type: 'line',
-        stack: 'Total',
+        name: "总执行次数",
+        type: "line",
+        stack: "Total",
         data: data.total,
         areaStyle: {},
         emphasis: {
-          focus: 'series'
-        }
+          focus: "series",
+        },
       },
       {
-        name: '成功次数',
-        type: 'line',
-        stack: 'Total',
+        name: "成功次数",
+        type: "line",
+        stack: "Total",
         data: data.success,
         areaStyle: {},
         emphasis: {
-          focus: 'series'
-        }
+          focus: "series",
+        },
       },
       {
-        name: '失败次数',
-        type: 'line',
-        stack: 'Total',
+        name: "失败次数",
+        type: "line",
+        stack: "Total",
         data: data.fail,
         areaStyle: {},
         emphasis: {
-          focus: 'series'
-        }
-      }
-    ]
-  })
-}
+          focus: "series",
+        },
+      },
+    ],
+  });
+};
 
 // 计算执行时长
 const calculateDuration = (start: string, end: string): string => {
-  if (!start || !end) return '-'
-  return diffTime(new Date(start), new Date(end))
-}
+  if (!start || !end) return "-";
+  return diffTime(new Date(start), new Date(end));
+};
 
 // 记录行样式
 const tableRowClassName = ({ row }: { row: any }): string => {
-  return row.status === 0 ? 'error-row' : ''
-}
+  return row.status === 0 ? "error-row" : "";
+};
 
 // 查看记录详情
 const viewRecordDetail = (row: any) => {
-  const date = new Date(row.startTime)
-  router.push(`/record/detail/${row.id}?year=${date.getFullYear()}&month=${date.getMonth() + 1}`)
-}
+  const date = new Date(row.startTime);
+  router.push(
+    `/record/detail/${row.id}?year=${date.getFullYear()}&month=${
+      date.getMonth() + 1
+    }`
+  );
+};
 
 // 生命周期钩子
 onMounted(() => {
-  loadDashboardData()
-  
-  window.addEventListener('resize', handleResize)
-})
+  loadDashboardData();
+
+  window.addEventListener("resize", handleResize);
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize)
-  pieChartInstance.value?.dispose()
-  lineChartInstance.value?.dispose()
-})
+  window.removeEventListener("resize", handleResize);
+  pieChartInstance.value?.dispose();
+  lineChartInstance.value?.dispose();
+});
 
 // 处理窗口大小变化
 const handleResize = () => {
-  pieChartInstance.value?.resize()
-  lineChartInstance.value?.resize()
-}
+  pieChartInstance.value?.resize();
+  lineChartInstance.value?.resize();
+};
 </script>
 
 <style lang="scss" scoped>
 .dashboard-container {
   padding: 20px;
-  
+
   .stat-card {
     margin-bottom: 20px;
-    
+
     .card-panel {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      
+
       &-icon-wrapper {
         width: 60px;
         height: 60px;
@@ -3659,21 +3770,21 @@ const handleResize = () => {
         justify-content: center;
         align-items: center;
       }
-      
+
       &-icon {
         font-size: 28px;
-        color: #5470C6;
+        color: #5470c6;
       }
-      
+
       &-description {
         text-align: right;
-        
+
         .card-panel-text {
           color: #909399;
           font-size: 14px;
           margin-bottom: 5px;
         }
-        
+
         .card-panel-num {
           font-size: 24px;
           font-weight: bold;
@@ -3681,18 +3792,18 @@ const handleResize = () => {
       }
     }
   }
-  
+
   .card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    
+
     .more-button {
-      color: #409EFF;
+      color: #409eff;
       font-size: 14px;
     }
   }
-  
+
   :deep(.error-row) {
     background-color: #ffeeee;
   }
@@ -3711,7 +3822,7 @@ const handleResize = () => {
    ```bash
    # 检查 Node 版本
    node -v
-   
+
    # 检查 npm 版本
    npm -v
    ```
@@ -3719,7 +3830,7 @@ const handleResize = () => {
 2. **代码编辑器**
 
    推荐使用 Visual Studio Code，并安装以下扩展：
-   
+
    - Volar (Vue 语言支持)
    - ESLint
    - Prettier
@@ -3746,36 +3857,36 @@ npm run dev
 
    ```typescript
    // vite.config.ts
-   import { defineConfig } from 'vite'
-   import vue from '@vitejs/plugin-vue'
-   import { resolve } from 'path'
+   import { defineConfig } from "vite";
+   import vue from "@vitejs/plugin-vue";
+   import { resolve } from "path";
 
    export default defineConfig({
      plugins: [vue()],
      resolve: {
        alias: {
-         '@': resolve(__dirname, 'src')
-       }
+         "@": resolve(__dirname, "src"),
+       },
      },
      server: {
        port: 5173,
        open: true,
        proxy: {
-         '/v1': {
-           target: 'http://localhost:9088',
+         "/v1": {
+           target: "http://localhost:9088",
            changeOrigin: true,
-           rewrite: (path) => path
-         }
-       }
+           rewrite: (path) => path,
+         },
+       },
      },
      css: {
        preprocessorOptions: {
          scss: {
-           additionalData: `@import "@/assets/styles/variables.scss";`
-         }
-       }
-     }
-   })
+           additionalData: `@import "@/assets/styles/variables.scss";`,
+         },
+       },
+     },
+   });
    ```
 
 2. **TypeScript 配置**
@@ -3801,7 +3912,12 @@ npm run dev
          "@/*": ["src/*"]
        }
      },
-     "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+     "include": [
+       "src/**/*.ts",
+       "src/**/*.d.ts",
+       "src/**/*.tsx",
+       "src/**/*.vue"
+     ],
      "references": [{ "path": "./tsconfig.node.json" }]
    }
    ```
@@ -3818,22 +3934,22 @@ npm run dev
        node: true,
      },
      extends: [
-       'plugin:vue/vue3-recommended',
-       'eslint:recommended',
-       '@vue/typescript/recommended',
-       'prettier',
+       "plugin:vue/vue3-recommended",
+       "eslint:recommended",
+       "@vue/typescript/recommended",
+       "prettier",
      ],
      parserOptions: {
        ecmaVersion: 2021,
      },
      rules: {
-       'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
-       'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
-       'vue/no-multiple-template-root': 'off',
-       '@typescript-eslint/no-explicit-any': 'off',
-       '@typescript-eslint/explicit-module-boundary-types': 'off',
+       "no-console": process.env.NODE_ENV === "production" ? "warn" : "off",
+       "no-debugger": process.env.NODE_ENV === "production" ? "warn" : "off",
+       "vue/no-multiple-template-root": "off",
+       "@typescript-eslint/no-explicit-any": "off",
+       "@typescript-eslint/explicit-module-boundary-types": "off",
      },
-   }
+   };
    ```
 
 ### 前端构建与部署
@@ -3925,39 +4041,39 @@ npm run preview
 // src/router/index.ts
 const routes = [
   {
-    path: '/',
+    path: "/",
     component: Layout,
-    redirect: '/dashboard',
+    redirect: "/dashboard",
     children: [
       {
-        path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('@/views/dashboard/Index.vue'), // 动态导入
-        meta: { title: '首页', icon: 'el-icon-s-home' }
-      }
-    ]
+        path: "dashboard",
+        name: "Dashboard",
+        component: () => import("@/views/dashboard/Index.vue"), // 动态导入
+        meta: { title: "首页", icon: "el-icon-s-home" },
+      },
+    ],
   },
   {
-    path: '/task',
+    path: "/task",
     component: Layout,
-    meta: { title: '任务管理', icon: 'el-icon-s-order' },
+    meta: { title: "任务管理", icon: "el-icon-s-order" },
     children: [
       {
-        path: 'list',
-        name: 'TaskList',
-        component: () => import('@/views/task/List.vue'), // 动态导入
-        meta: { title: '任务列表' }
+        path: "list",
+        name: "TaskList",
+        component: () => import("@/views/task/List.vue"), // 动态导入
+        meta: { title: "任务列表" },
       },
       {
-        path: 'edit/:id?',
-        name: 'TaskEdit',
-        component: () => import('@/views/task/Edit.vue'), // 动态导入
-        meta: { title: '编辑任务', activeMenu: '/task/list' },
-        hidden: true
-      }
-    ]
-  }
-]
+        path: "edit/:id?",
+        name: "TaskEdit",
+        component: () => import("@/views/task/Edit.vue"), // 动态导入
+        meta: { title: "编辑任务", activeMenu: "/task/list" },
+        hidden: true,
+      },
+    ],
+  },
+];
 ```
 
 #### 组件懒加载
@@ -3966,19 +4082,19 @@ const routes = [
 
 ```typescript
 // src/components/index.ts
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent } from "vue";
 
 // 异步加载组件
-export const JsonEditor = defineAsyncComponent(() => 
-  import('./widgets/JsonEditor.vue')
-)
+export const JsonEditor = defineAsyncComponent(
+  () => import("./widgets/JsonEditor.vue")
+);
 
 // 异步加载带加载状态的组件
 export const TaskChart = defineAsyncComponent({
-  loader: () => import('./charts/TaskChart.vue'),
+  loader: () => import("./charts/TaskChart.vue"),
   delay: 200,
-  loadingComponent: () => import('./common/LoadingComponent.vue')
-})
+  loadingComponent: () => import("./common/LoadingComponent.vue"),
+});
 ```
 
 #### 静态资源优化
@@ -3989,7 +4105,7 @@ export const TaskChart = defineAsyncComponent({
 
    ```typescript
    // vite.config.ts
-   import viteImagemin from 'vite-plugin-imagemin'
+   import viteImagemin from "vite-plugin-imagemin";
 
    export default defineConfig({
      plugins: [
@@ -3997,32 +4113,32 @@ export const TaskChart = defineAsyncComponent({
        viteImagemin({
          gifsicle: {
            optimizationLevel: 7,
-           interlaced: false
+           interlaced: false,
          },
          optipng: {
-           optimizationLevel: 7
+           optimizationLevel: 7,
          },
          mozjpeg: {
-           quality: 80
+           quality: 80,
          },
          pngquant: {
            quality: [0.8, 0.9],
-           speed: 4
+           speed: 4,
          },
          svgo: {
            plugins: [
              {
-               name: 'removeViewBox'
+               name: "removeViewBox",
              },
              {
-               name: 'removeEmptyAttrs',
-               active: false
-             }
-           ]
-         }
-       })
-     ]
-   })
+               name: "removeEmptyAttrs",
+               active: false,
+             },
+           ],
+         },
+       }),
+     ],
+   });
    ```
 
 2. **CDN 加速**
@@ -4034,15 +4150,15 @@ export const TaskChart = defineAsyncComponent({
    export default defineConfig({
      build: {
        rollupOptions: {
-         external: ['echarts'],
+         external: ["echarts"],
          output: {
            globals: {
-             echarts: 'echarts'
-           }
-         }
-       }
-     }
-   })
+             echarts: "echarts",
+           },
+         },
+       },
+     },
+   });
    ```
 
    ```html
@@ -4052,3 +4168,350 @@ export const TaskChart = defineAsyncComponent({
      <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
    </head>
    ```
+
+---
+
+## 令牌安全机制
+
+### 令牌概述
+
+DistributedJob 系统采用基于 JWT (JSON Web Token) 的认证机制，通过实现双令牌系统来提高系统安全性，有效防范令牌滥用、XSS 和 CSRF 攻击。本系统采用的认证方式符合行业安全标准，保障用户和系统的安全。
+
+### 双令牌机制
+
+系统实现正规的长短令牌机制，具体包括：
+
+1. **Access Token (短期令牌)**
+
+   - 短期有效（默认设置为 30 分钟）
+   - 用于日常 API 访问认证
+   - 实现无状态验证
+   - 携带最小权限信息
+
+2. **Refresh Token (长期令牌)**
+
+   - 长期有效（默认设置为 7 天）
+   - 仅用于获取新的 Access Token
+   - 通过安全的 HttpOnly Cookie 传输
+   - 每次刷新会生成新的 Refresh Token
+
+**实现细节**：
+
+```go
+// 生成访问令牌 (Access Token)
+func (s *AuthService) generateAccessToken(user *entity.User) (string, error) {
+    nowTime := time.Now()
+    expireTime := nowTime.Add(time.Duration(s.jwtExpireMinutes) * time.Minute)
+
+    claims := jwt.StandardClaims{
+        ExpiresAt: expireTime.Unix(),
+        IssuedAt:  nowTime.Unix(),
+        Id:        fmt.Sprintf("%d", user.ID),
+        Subject:   user.Username,
+    }
+
+    tokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    token, err := tokenClaims.SignedString([]byte(s.jwtSecret))
+    return token, err
+}
+
+// 生成刷新令牌 (Refresh Token)
+func (s *AuthService) generateRefreshToken(user *entity.User) (string, error) {
+    nowTime := time.Now()
+    expireTime := nowTime.Add(time.Duration(s.refreshTokenExpireDays) * 24 * time.Hour)
+
+    claims := jwt.StandardClaims{
+        ExpiresAt: expireTime.Unix(),
+        IssuedAt:  nowTime.Unix(),
+        Id:        fmt.Sprintf("refresh_%d_%s", user.ID, uuid.New().String()),
+        Subject:   user.Username,
+    }
+
+    tokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    token, err := tokenClaims.SignedString([]byte(s.jwtRefreshSecret))
+    return token, err
+}
+```
+
+### 令牌撤销
+
+为了支持令牌撤销功能，系统采用以下策略：
+
+1. **令牌黑名单机制**
+
+   - 使用 Redis 存储已撤销的令牌标识
+   - 撤销的令牌会被登记到黑名单中直到原本过期时间
+   - 每次验证令牌时检查是否在黑名单中
+
+2. **Redis 存储结构**
+
+   - 使用 Redis 的 Hash 结构存储撤销的令牌
+   - 使用令牌 ID 作为键，过期时间作为值
+   - 自动设置过期时间减少存储开销
+
+**实现细节**：
+
+```go
+// 撤销令牌
+func (s *AuthService) RevokeToken(token string) error {
+    claims, err := s.parseToken(token)
+    if err != nil {
+        return err
+    }
+
+    // 获取令牌 ID
+    jti := claims.Id
+    exp := claims.ExpiresAt
+
+    // 将令牌加入黑名单
+    key := fmt.Sprintf("revoked_token:%s", jti)
+    return s.redisClient.Set(key, "1", time.Unix(exp, 0).Sub(time.Now())).Err()
+}
+
+// 验证令牌是否被撤销
+func (s *AuthService) isTokenRevoked(jti string) bool {
+    key := fmt.Sprintf("revoked_token:%s", jti)
+    exists, err := s.redisClient.Exists(key).Result()
+    if err != nil {
+        return false
+    }
+    return exists > 0
+}
+```
+
+### 令牌内容优化
+
+为降低安全风险，优化令牌内容：
+
+1. **精简令牌内容**
+
+   - Access Token 中仅存储用户 ID (userID)
+   - 不存储敏感信息如权限列表、个人资料等
+   - 敏感信息通过专用 API 获取
+
+2. **分离关注点**
+
+   - 认证信息与用户资料分离
+   - 令牌仅用于身份验证
+   - 业务数据从数据库或缓存获取
+
+**实现示例**：
+
+```go
+// 验证令牌并获取用户ID
+func (s *AuthService) ValidateToken(token string) (int64, error) {
+    claims, err := s.parseToken(token)
+    if (err != nil) {
+        return 0, err
+    }
+
+    // 检查令牌是否被撤销
+    if s.isTokenRevoked(claims.Id) {
+        return 0, errors.New("token has been revoked")
+    }
+
+    // 从令牌中提取用户ID
+    userID, err := strconv.ParseInt(claims.Id, 10, 64)
+    if (err != nil) {
+        return 0, err
+    }
+
+    return userID, nil
+}
+
+// 根据用户ID获取用户权限（单独API）
+func (s *AuthService) GetUserPermissions(userID int64) ([]string, error) {
+    // 从数据库或缓存获取用户权限
+    return s.userRepository.GetUserPermissions(userID)
+}
+```
+
+### 令牌传输安全
+
+提高令牌传输和存储的安全性：
+
+1. **HttpOnly Cookie**
+
+   - Refresh Token 通过 HttpOnly Cookie 传输
+   - 防止 JavaScript 访问令牌，抵御 XSS 攻击
+   - 设置 Secure 标志确保仅通过 HTTPS 传输
+
+2. **Access Token 传输**
+
+   - Access Token 通过 Authorization 头传输
+   - 避免在 URL 参数中传输令牌
+   - 前端避免在 localStorage 中存储令牌
+
+**服务端实现**：
+
+```go
+func (h *AuthHandler) Login(c *gin.Context) {
+    // 验证用户凭据...
+
+    // 生成令牌
+    accessToken, refreshToken, err := h.authService.GenerateTokens(user)
+    if (err != nil) {
+        response.Fail(c, response.CodeInternalError, err.Error())
+        return
+    }
+
+    // 设置 Refresh Token 为 HttpOnly Cookie
+    c.SetCookie(
+        "refresh_token",
+        refreshToken,
+        int(time.Duration(h.config.Auth.RefreshTokenExpireDays)*24*time.Hour/time.Second),
+        "/v1/auth",  // 仅用于认证路径
+        h.config.Server.Domain,
+        h.config.Server.SecureCookie,  // 在生产环境设为 true
+        true,  // HttpOnly
+    )
+
+    // 仅返回 Access Token 给客户端
+    response.Success(c, gin.H{
+        "token": accessToken,
+        "user":  userInfo,
+    })
+}
+```
+
+### 令牌刷新流程
+
+优化令牌刷新逻辑，提高安全性：
+
+1. **标准刷新流程**
+
+   - 清理前端中的令牌刷新队列机制
+   - 当 Access Token 过期时，使用 Refresh Token 获取新令牌
+   - 每次刷新同时更新 Access Token 和 Refresh Token
+   - 实现令牌轮转机制，增加安全性
+
+2. **严格的验证机制**
+
+   - 刷新令牌时验证用户的设备信息
+   - 监控异常的刷新请求模式
+   - 支持多设备登录但各自使用独立的令牌对
+
+**前端实现**：
+
+```typescript
+// API 拦截器处理令牌刷新
+const apiClient = axios.create({
+  baseURL: "/v1",
+  timeout: 10000,
+});
+
+// 响应拦截器处理令牌过期情况
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // 如果是因为令牌过期导致的 401 错误且未尝试过刷新令牌
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        // 调用刷新令牌接口，此处无需手动发送刷新令牌
+        // 服务端会从 HttpOnly Cookie 中读取
+        const { data } = await axios.post("/v1/auth/refresh");
+
+        // 更新访问令牌
+        setToken(data.token);
+
+        // 重新发送之前失败的请求
+        originalRequest.headers["Authorization"] = "Bearer " + data.token;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // 刷新令牌也失效，需要重新登录
+        removeToken();
+        router.push("/login");
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+```
+
+**服务端实现**：
+
+```go
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+    // 从 Cookie 中获取刷新令牌
+    refreshToken, err := c.Cookie("refresh_token")
+    if (err != nil) {
+        response.Fail(c, response.CodeUnauthorized, "refresh token not found")
+        return
+    }
+
+    // 验证刷新令牌
+    userID, err := h.authService.ValidateRefreshToken(refreshToken)
+    if (err != nil) {
+        response.Fail(c, response.CodeUnauthorized, "invalid refresh token")
+        return
+    }
+
+    // 获取用户信息
+    user, err := h.userService.GetUserByID(userID)
+    if (err != nil) {
+        response.Fail(c, response.CodeInternalError, err.Error())
+        return
+    }
+
+    // 生成新的令牌对
+    accessToken, newRefreshToken, err := h.authService.GenerateTokens(user)
+    if (err != nil) {
+        response.Fail(c, response.CodeInternalError, err.Error())
+        return
+    }
+
+    // 撤销旧的刷新令牌
+    h.authService.RevokeToken(refreshToken)
+
+    // 设置新的刷新令牌 Cookie
+    c.SetCookie(
+        "refresh_token",
+        newRefreshToken,
+        int(time.Duration(h.config.Auth.RefreshTokenExpireDays)*24*time.Hour/time.Second),
+        "/v1/auth",
+        h.config.Server.Domain,
+        h.config.Server.SecureCookie,
+        true,
+    )
+
+    // 返回新的访问令牌
+    response.Success(c, gin.H{
+        "token": accessToken,
+    })
+}
+```
+
+### 令牌最佳实践
+
+系统实施以下令牌安全最佳实践：
+
+1. **令牌生命周期管理**
+
+   - Access Token: 30 分钟有效期
+   - Refresh Token: 7 天有效期
+   - 支持手动撤销令牌
+   - 支持全局令牌刷新（如密码更改时）
+
+2. **传输安全**
+
+   - 所有令牌操作都通过 HTTPS 进行
+   - 令牌不暴露给第三方 JavaScript
+   - 不在客户端日志中记录令牌信息
+
+3. **防护措施**
+
+   - 实现速率限制，防止暴力攻击
+   - 监控异常的令牌使用模式
+   - 记录关键令牌操作的审计日志
+
+4. **应急响应**
+
+   - 支持用户会话强制终止
+   - 支持所有活跃令牌的批量撤销
+   - 提供可疑活动的实时警报
