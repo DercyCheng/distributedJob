@@ -7,12 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"distributedJob/internal/api/handler"
 	"distributedJob/internal/api/middleware"
-	"distributedJobonfig"
-	"distributedJobob"
-	"distributedJobodel/entity"
-	"distributedJobervice"
-	"distributedJobtore"
+	"distributedJob/internal/config"
+	"distributedJob/internal/infrastructure"
+	"distributedJob/internal/job"
+	"distributedJob/internal/model/entity"
+	"distributedJob/internal/service"
+	"distributedJob/internal/store"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,6 +27,7 @@ type Server struct {
 	taskService  service.TaskService
 	authService  service.AuthService
 	tokenRevoker store.TokenRevoker
+	infraManager *infrastructure.Infrastructure // 添加基础设施管理器
 }
 
 // ResponseBody API响应体
@@ -136,6 +140,7 @@ func NewServer(
 	repoManager store.RepositoryManager,
 	authService service.AuthService,
 	tokenRevoker store.TokenRevoker,
+	infraManager *infrastructure.Infrastructure,
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
@@ -145,9 +150,13 @@ func NewServer(
 	router.Use(middleware.CORS()) // 添加CORS中间件
 	router.Use(gin.Recovery())
 
+	// 添加可观测性中间件（如果可用）
+	if infraManager != nil && infraManager.Tracer != nil && infraManager.Metrics != nil {
+		router.Use(middleware.InstrumentationMiddleware(infraManager.Tracer, infraManager.Metrics))
+	}
+
 	// 创建服务
 	taskService := service.NewTaskService(repoManager.Task(), scheduler)
-
 	s := &Server{
 		config:       config,
 		router:       router,
@@ -155,6 +164,7 @@ func NewServer(
 		taskService:  taskService,
 		authService:  authService,
 		tokenRevoker: tokenRevoker,
+		infraManager: infraManager,
 	}
 
 	s.setupRoutes()
@@ -169,10 +179,23 @@ func (s *Server) Router() http.Handler {
 // setupRoutes 设置API路由
 func (s *Server) setupRoutes() {
 	// API基础路径
-	base := s.router.Group(s.config.Server.ContextPath)
+	base := s.router.Group(s.config.Server.ContextPath) // 健康检查不需要验证
+	if s.infraManager != nil {
+		// 使用增强版健康检查
+		healthHandler := handler.NewHealthHandler(s.infraManager)
+		base.GET("/health", healthHandler.Check)
 
-	// 健康检查不需要验证
-	base.GET("/health", s.healthCheck)
+		// 仪表盘处理器
+		dashboardHandler := handler.NewDashboardHandler(
+			s.taskService,
+			s.scheduler,
+			s.infraManager.Metrics,
+		)
+		base.GET("/dashboard/overview", dashboardHandler.Overview)
+	} else {
+		// 使用简单的健康检查
+		base.GET("/health", s.healthCheck)
+	}
 
 	// 服务关闭API仅限本地访问
 	base.GET("/shutdown", s.localOnly(), s.shutdown)

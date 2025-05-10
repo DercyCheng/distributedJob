@@ -1,91 +1,164 @@
-# DistributedJob
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/username/distributedJob)](https://goreportcard.com/report/github.com/username/distributedJob)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.16%2B-blue.svg)](https://golang.org/dl/)
-[![MySQL](https://img.shields.io/badge/mysql-5.7%2B-blue.svg)](https://www.mysql.com/)
+<div align="center">
+  <h1>DistributedJob</h1>
+  <h3>高性能分布式任务调度系统</h3>
+</div>
 
-一个轻量级、分布式的定时任务调度平台，支持 HTTP 和 gRPC 任务类型。
+![Go Version](https://img.shields.io/badge/go-1.23+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## 📖 概述
+## 项目简介
 
-DistributedJob 是一个基于 Go 和 MySQL 构建的分布式调度平台。它为跨分布式系统的定时任务调度和管理提供了简单可靠的解决方案，具备自动故障转移和全面的监控能力。
+DistributedJob 是一个功能强大、高可用的分布式任务调度系统，基于 Go 语言开发，提供任务的可靠调度、执行和监控。系统支持多种类型的任务执行方式，包括 HTTP 回调和 gRPC 调用，同时具备完整的用户权限管理和系统监控能力。
 
-## ✨ 特性
+## 主要特性
 
-- **分布式架构** - 无状态分布式服务设计，使用乐观锁确保每个任务只在一个实例上执行
-- **多种任务类型** - 支持 HTTP 钩子和 gRPC 调用
-- **Web 控制台** - 内置可视化管理界面，用于配置和监控任务
-- **强大的重试机制** - 可配置的重试策略和备用端点
-- **执行历史记录** - 全面的执行记录，支持自动表分区
-- **优雅关闭** - 健康检查和平滑服务终止
-- **部门管理** - 按部门组织任务，便于分类
-- **精细化权限控制** - 全面的权限系统，控制用户访问
-- **响应式界面** - 现代响应式设计，同时支持桌面和移动设备
+- **分布式调度**: 基于 etcd 实现分布式锁，确保任务不重复执行
+- **多种执行方式**: 支持 HTTP 回调和 gRPC 协议执行任务
+- **可靠性保障**:
+  - Kafka 消息队列支持，确保任务不丢失
+  - 任务重试机制，处理临时故障
+  - 事务支持，确保数据一致性
+- **权限管理**: 完整的用户、角色、权限和部门管理
+- **可观测性**:
+  - Prometheus 指标收集
+  - Jaeger 分布式跟踪
+  - 结构化日志支持
+- **高性能**:
+  - 协程池管理
+  - 连接池优化
+  - 并发控制
+- **Web界面**: 现代化 Vue3 前端，支持任务管理和监控
 
-## 🚀 快速开始
+## 系统架构
 
-### 前置条件
+DistributedJob 采用现代化的微服务架构，主要由以下组件构成:
 
-- Go 1.16+
-- MySQL 5.7+
-- 任意操作系统（Windows、macOS、Linux）
+- **核心调度服务**: 负责任务调度和分发
+- **API服务**: RESTful API，提供管理接口
+- **RPC服务**: gRPC 接口，用于任务执行和服务间通信
+- **Web界面**: Vue3 构建的管理界面
+- **存储层**: MySQL 用于持久化数据，Redis 用于缓存
+- **消息队列**: Kafka 用于任务分发
+- **服务协调**: etcd 用于服务发现和分布式锁
+- **可观测性组件**: Prometheus, Grafana, Jaeger, Elasticsearch
 
-### 安装
+## 快速开始
 
-```bash
-# 克隆仓库
-git clone https://github.com/username/distributedJob.git
-cd distributedJob
+### 系统要求
 
-# 从源代码构建
-go build -o distributedJob ./cmd/server/main.go
+- Go 1.23+
+- Docker & Docker Compose
+- Node.js 14+
 
-# 在 config.yaml 中配置数据库
-# 启动服务
-./distributedJob
+### 使用 Docker Compose 启动
+
+1. 克隆代码库
+
+   ```bash
+   git clone https://github.com/yourusername/distributedJob.git
+   cd distributedJob
+   ```
+2. 使用 Docker Compose 启动所有组件
+
+   ```bash
+   docker-compose up -d
+   ```
+
+   这将启动所有必要的组件，包括:
+
+   - MySQL 数据库
+   - Redis 缓存
+   - Kafka & Zookeeper
+   - etcd 服务
+   - Prometheus & Grafana
+   - Elasticsearch & Kibana
+   - Jaeger 链路追踪
+3. 访问服务
+
+   - API服务: http://localhost:8080/v1
+   - Web界面: http://localhost:8080
+   - Grafana: http://localhost:3000
+   - Jaeger UI: http://localhost:16686
+   - Kibana: http://localhost:5601
+
+### 手动部署
+
+1. 准备依赖组件 (可参考 docker-compose.yml)
+2. 编译服务
+
+   ```bash
+   go build -o distributedJob ./cmd
+   ```
+3. 配置服务
+
+   ```bash
+   cp configs/config.yaml.example configs/config.yaml
+   # 编辑配置文件以适应你的环境
+   ```
+4. 初始化数据库
+
+   ```bash
+   mysql -u root -p < scripts/init-db/init.sql
+   ```
+5. 启动服务
+
+   ```bash
+   ./distributedJob --config configs/config.yaml
+   ```
+6. 构建并部署前端
+
+   ```bash
+   cd web-ui
+   npm install
+   npm run build
+   # 将生成的 dist 目录部署到 web 服务器
+   ```
+
+## 配置说明
+
+主要配置文件位于 `configs/config.yaml`，包含以下配置项:
+
+```yaml
+server:
+  host: 0.0.0.0
+  port: 8080
+  context_path: /v1
+  shutdown_timeout: 30
+
+database:
+  url: localhost:3306
+  username: root
+  password: root
+  schema: distributed_job
+
+redis:
+  url: localhost:6379
+  password: ""
+  db: 0
+
+# 更多配置项...
 ```
 
-有关详细的安装说明，请参阅[安装指南](./doc/installation.md)。
+## API 
 
-## 📚 文档
+系统提供完整的 RESTful API:
 
-- [架构设计](./doc/architecture.md) - 系统架构和组件详情
-- [安装指南](./doc/installation.md) - 详细的安装和部署指南
-- [使用指南](./doc/usage.md) - 系统使用方法和示例
-- [API 参考](./doc/api.md) - API 文档
-- [数据库设计](./doc/database.md) - 数据库架构和数据模型
-- [前端设计](./doc/ui.md) - 界面实现详情
+- **认证接口**: 用户登录、注销、刷新令牌
+- **用户管理**: 创建、查询、更新用户信息
+- **角色权限**: 角色分配、权限管理
+- **部门管理**: 部门层级结构管理
+- **任务管理**: 任务的创建、执行、查询和控制
+- **系统监控**: 健康检查、性能指标收集
 
-## 💡 使用场景
+## 贡献指南
 
-- 定时数据处理和 ETL 任务
-- 定期健康检查和系统监控
-- 周期性数据同步
-- 自动化报表生成和分发
-- 定时清理和维护任务
+欢迎提交 Issue 和 Pull Request 贡献代码。在提交 PR 前，请确保:
 
-## 🔧 技术栈
+1. 代码风格符合项目规范
+2. 提供完整的单元测试和集成测试
+3. 必要时更新文档
 
-### 后端
+## 许可证
 
-- **语言**：Go
-- **数据库**：MySQL
-- **API**：RESTful API
-
-### 前端
-
-- **构建工具**：Vite
-- **语言**：TypeScript
-- **框架**：Vue 3 (Composition API)
-- **UI 库**：Element Plus
-- **状态管理**：Pinia
-- **HTTP 客户端**：Axios
-
-## 📝 许可证
-
-本项目采用 MIT 许可证 - 详情请查看 [LICENSE](LICENSE) 文件。
-
-## 🤝 贡献
-
-欢迎贡献！请随时提交 Pull Request。
+本项目采用 MIT 许可证。

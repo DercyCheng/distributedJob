@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"distributedJob/internal/config"
+
 	"github.com/go-redis/redis/v8"
 )
 
@@ -46,6 +47,12 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 // Client returns the Redis client
 func (m *Manager) Client() *redis.Client {
 	return m.client
+}
+
+// Ping checks if Redis is alive
+func (m *Manager) Ping(ctx context.Context) error {
+	_, err := m.client.Ping(ctx).Result()
+	return err
 }
 
 // Close closes the Redis client

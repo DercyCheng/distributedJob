@@ -5,8 +5,9 @@ import (
 	"time"
 
 	pb "distributedJob/internal/rpc/proto"
-	"distributedJobervice"
-	"distributedJob"
+	"distributedJob/internal/service"
+	"distributedJob/pkg/logger"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

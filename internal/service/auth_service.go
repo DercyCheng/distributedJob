@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	"distributedJob/internal/model/entity"
-	"distributedJobtore"
+	"distributedJob/internal/store"
+
+	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,6 +21,9 @@ const (
 
 // AuthService 认证服务接口
 type AuthService interface {
+	// 设置可观测性组件
+	SetTracer(tracer interface{})
+
 	// 用户认证
 	Login(username, password string) (string, string, *entity.User, error)
 	GenerateTokens(user *entity.User) (string, string, error)
@@ -79,6 +83,7 @@ type authService struct {
 	accessTokenExpire  time.Duration      // 短期token过期时间 (30分钟)
 	refreshTokenExpire time.Duration      // 长期token过期时间 (7天)
 	tokenRevoker       store.TokenRevoker // 令牌撤销接口
+	tracer             interface{}        // 分布式追踪组件
 }
 
 // NewAuthService 创建认证服务
@@ -106,11 +111,35 @@ func NewAuthService(
 	}
 }
 
+// SetTracer 设置分布式追踪器
+func (s *authService) SetTracer(tracer interface{}) {
+	s.tracer = tracer
+}
+
 // Login 用户登录
 func (s *authService) Login(username, password string) (string, string, *entity.User, error) {
+	// 创建跟踪span
+	var ctx interface{}
+	var span interface{}
+
+	if tracer, ok := s.tracer.(interface {
+		StartSpanWithAttributes(ctx interface{}, name string, attrs ...interface{}) (interface{}, interface{})
+	}); ok {
+		ctx, span = tracer.StartSpanWithAttributes(nil, "auth_service.login", nil)
+		if endSpan, ok := span.(interface{ End() }); ok {
+			defer endSpan.End()
+		}
+	}
+
 	// 查询用户
 	user, err := s.userRepo.GetUserByUsername(username)
 	if err != nil {
+		// 记录错误
+		if recordError, ok := s.tracer.(interface {
+			RecordError(ctx interface{}, err error)
+		}); ok && ctx != nil {
+			recordError.RecordError(ctx, err)
+		}
 		return "", "", nil, err
 	}
 	if user == nil {

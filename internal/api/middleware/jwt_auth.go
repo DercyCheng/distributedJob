@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	"distributedJob/internal/config"
-	"distributedJobtore"
+	"distributedJob/internal/store"
+
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 

@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"distributedJob/internal/config"
-	"distributedJobob"
-	pb "distributedJobpc/proto"
-	"distributedJobervice"
-	"distributedJob"
+	"distributedJob/internal/job"
+	pb "distributedJob/internal/rpc/proto"
+	"distributedJob/internal/service"
+	"distributedJob/pkg/logger"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"distributedJob/internal/job"
-	"distributedJobodel/entity"
-	"distributedJobtore"
+	"distributedJob/internal/model/entity"
+	"distributedJob/internal/store"
 )
 
 // 定义错误
@@ -37,6 +37,10 @@ type TaskStatistics struct {
 
 // TaskService 任务服务接口
 type TaskService interface {
+	// 设置可观测性组件
+	SetTracer(tracer interface{})
+	SetMetrics(metrics interface{})
+
 	// 任务相关
 	GetTaskList(departmentID int64, page, size int) ([]*entity.Task, int64, error)
 	GetTaskByID(id int64) (*entity.Task, error)
@@ -62,6 +66,8 @@ type TaskService interface {
 type taskService struct {
 	taskRepo  store.TaskRepository
 	scheduler *job.Scheduler
+	tracer    interface{} // 先定义为interface，后面具体化
+	metrics   interface{} // 先定义为interface，后面具体化
 }
 
 // NewTaskService 创建任务服务
@@ -70,6 +76,16 @@ func NewTaskService(taskRepo store.TaskRepository, scheduler *job.Scheduler) Tas
 		taskRepo:  taskRepo,
 		scheduler: scheduler,
 	}
+}
+
+// SetTracer 设置分布式追踪器
+func (s *taskService) SetTracer(tracer interface{}) {
+	s.tracer = tracer
+}
+
+// SetMetrics 设置指标监控
+func (s *taskService) SetMetrics(metrics interface{}) {
+	s.metrics = metrics
 }
 
 // GetTaskList 获取任务列表

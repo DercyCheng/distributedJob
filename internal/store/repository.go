@@ -70,4 +70,5 @@ type RepositoryManager interface {
 	User() UserRepository
 	Role() RoleRepository
 	Permission() PermissionRepository
+	Ping() error
 }

@@ -10,11 +10,73 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+// Logger is our custom logger structure
+type Logger struct {
+	zapLogger *zap.Logger
+	sugar     *zap.SugaredLogger
+}
+
 var (
-	logger *zap.Logger
-	sugar  *zap.SugaredLogger
-	once   sync.Once
+	logger   *zap.Logger
+	sugar    *zap.SugaredLogger
+	once     sync.Once
+	instance *Logger
 )
+
+// GetLogger returns the singleton logger instance
+func GetLogger() *Logger {
+	return instance
+}
+
+// Info logs a message at info level
+func (l *Logger) Info(msg string, fields ...interface{}) {
+	l.sugar.Infow(msg, fields...)
+}
+
+// Infof logs a formatted message at info level
+func (l *Logger) Infof(format string, args ...interface{}) {
+	l.sugar.Infof(format, args...)
+}
+
+// Error logs a message at error level
+func (l *Logger) Error(msg string, fields ...interface{}) {
+	l.sugar.Errorw(msg, fields...)
+}
+
+// Errorf logs a formatted message at error level
+func (l *Logger) Errorf(format string, args ...interface{}) {
+	l.sugar.Errorf(format, args...)
+}
+
+// Debug logs a message at debug level
+func (l *Logger) Debug(msg string, fields ...interface{}) {
+	l.sugar.Debugw(msg, fields...)
+}
+
+// Debugf logs a formatted message at debug level
+func (l *Logger) Debugf(format string, args ...interface{}) {
+	l.sugar.Debugf(format, args...)
+}
+
+// Warn logs a message at warn level
+func (l *Logger) Warn(msg string, fields ...interface{}) {
+	l.sugar.Warnw(msg, fields...)
+}
+
+// Warnf logs a formatted message at warn level
+func (l *Logger) Warnf(format string, args ...interface{}) {
+	l.sugar.Warnf(format, args...)
+}
+
+// Fatal logs a message at fatal level and then calls os.Exit(1)
+func (l *Logger) Fatal(msg string, fields ...interface{}) {
+	l.sugar.Fatalw(msg, fields...)
+}
+
+// Fatalf logs a formatted message at fatal level and then calls os.Exit(1)
+func (l *Logger) Fatalf(format string, args ...interface{}) {
+	l.sugar.Fatalf(format, args...)
+}
 
 // Init 初始化日志
 func Init(level, filename string, maxSize, maxBackups, maxAge int, compress bool) {
@@ -72,10 +134,15 @@ func Init(level, filename string, maxSize, maxBackups, maxAge int, compress bool
 			writeSyncer,
 			logLevel,
 		)
-
 		// 创建Logger
 		logger = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 		sugar = logger.Sugar()
+
+		// Initialize the singleton instance
+		instance = &Logger{
+			zapLogger: logger,
+			sugar:     sugar,
+		}
 
 		Debug("Logger initialized")
 	})

@@ -8,9 +8,16 @@ import (
 	"time"
 
 	"distributedJob/internal/config"
-	"distributedJobodel/entity"
-	"distributedJob"
+	"distributedJob/internal/model/entity"
+	"distributedJob/internal/store/etcd"
+	"distributedJob/internal/store/kafka"
+	"distributedJob/pkg/logger"
+	"distributedJob/pkg/metrics"
+	"distributedJob/pkg/tracing"
+
+	"github.com/IBM/sarama"
 	"github.com/robfig/cron/v3"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Scheduler 管理定时任务的调度器
@@ -26,6 +33,19 @@ type Scheduler struct {
 	runningJobs chan *JobContext
 	ctx         context.Context
 	cancel      context.CancelFunc
+
+	// 新增加的分布式支持
+	useKafka       bool
+	kafkaManager   *kafka.Manager
+	kafkaTopic     string
+	useEtcd        bool
+	etcdManager    *etcd.Manager
+	etcdLockPrefix string
+	serviceID      string
+
+	// 可观测性支持
+	metrics *metrics.Metrics
+	tracer  *tracing.Tracer
 }
 
 // JobContext 表示一个任务执行上下文
@@ -59,18 +79,34 @@ type TaskRepository interface {
 }
 
 // NewScheduler 创建一个新的调度器
-func NewScheduler(config *config.Config) (*Scheduler, error) {
+func NewScheduler(config *config.Config, opts ...SchedulerOption) (*Scheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// 设置默认的Kafka主题名称
+	kafkaTopic := "distributed_job_jobs" // 默认主题名
+	if config.Kafka.TopicPrefix != "" {
+		kafkaTopic = config.Kafka.TopicPrefix + "jobs"
+	}
 
 	// 创建调度器实例
 	s := &Scheduler{
-		cron:        cron.New(cron.WithSeconds()), // 支持秒级调度
-		config:      config,
-		jobs:        make(map[int64]cron.EntryID),
-		jobsMutex:   sync.RWMutex{},
-		runningJobs: make(chan *JobContext, config.Job.QueueSize),
-		ctx:         ctx,
-		cancel:      cancel,
+		cron:           cron.New(cron.WithSeconds()), // 支持秒级调度
+		config:         config,
+		jobs:           make(map[int64]cron.EntryID),
+		jobsMutex:      sync.RWMutex{},
+		runningJobs:    make(chan *JobContext, config.Job.QueueSize),
+		ctx:            ctx,
+		cancel:         cancel,
+		useKafka:       false,
+		useEtcd:        false,
+		kafkaTopic:     kafkaTopic,
+		etcdLockPrefix: "/distributed_job/locks/",
+		serviceID:      fmt.Sprintf("scheduler-%d", time.Now().UnixNano()),
+	}
+
+	// 应用配置选项
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	// 创建HTTP任务执行器
@@ -90,6 +126,71 @@ func (s *Scheduler) Start() error {
 
 	logger.Info("Starting job scheduler...")
 
+	// 创建追踪span
+	var ctx context.Context
+	var startupSpan interface{} // 使用interface{}避免nil检查问题
+
+	if s.tracer != nil {
+		var span interface{}
+		ctx, span = s.tracer.StartSpanWithAttributes(
+			s.ctx,
+			"scheduler_startup",
+			attribute.String("service.id", s.serviceID),
+		)
+		startupSpan = span
+		defer func() {
+			if sp, ok := startupSpan.(interface{ End() }); ok {
+				sp.End()
+			}
+		}()
+	} else {
+		ctx = s.ctx
+	}
+	// 如果启用Kafka，设置消费者监听作业执行请求
+	if s.useKafka && s.kafkaManager != nil {
+		logger.Info("Setting up Kafka job distribution...")
+
+		// 任务处理函数
+		jobHandler := func(msg *sarama.ConsumerMessage) error {
+			// 在实际实现中，我们会从消息内容解析任务，并提交给工作线程执行
+			if s.metrics != nil {
+				s.metrics.IncrementCounter("jobs_received_kafka", "scheduler")
+			}
+			logger.Infof("Received job from Kafka: %s", string(msg.Value))
+			return nil
+		}
+
+		// 设置消费者
+		err := s.kafkaManager.InitializeConsumer(
+			[]string{s.kafkaTopic},
+			s.config.Kafka.ConsumerGroup,
+			jobHandler,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize kafka consumer: %w", err)
+		}
+
+		// 启动消费者
+		if err := s.kafkaManager.StartConsumer(); err != nil {
+			return fmt.Errorf("failed to start kafka consumer: %w", err)
+		}
+	}
+
+	// 如果启用ETCD，注册服务
+	if s.useEtcd && s.etcdManager != nil {
+		logger.Info("Registering scheduler service in etcd...")
+
+		serviceRegistry, err := s.etcdManager.NewServiceRegistry("distributed_job/services", 10)
+		if err != nil {
+			logger.Warnf("Failed to create service registry: %v", err)
+		} else {
+			err = serviceRegistry.Register(ctx, "scheduler", s.serviceID)
+			if err != nil {
+				logger.Warnf("Failed to register service: %v", err)
+			}
+		}
+	}
+
 	// 首先启动工作线程
 	go s.httpWorker.Start(s.ctx)
 	go s.grpcWorker.Start(s.ctx)
@@ -102,11 +203,21 @@ func (s *Scheduler) Start() error {
 	if s.taskStore != nil {
 		if err := s.LoadAllTasks(); err != nil {
 			logger.Errorf("Failed to load tasks: %v", err)
+
+			if s.metrics != nil {
+				s.metrics.IncrementCounter("scheduler_errors", "load_tasks")
+			}
 		}
 	}
 
 	// 启动结果处理协程
 	go s.processResults()
+
+	// 记录启动事件
+	if s.metrics != nil {
+		s.metrics.IncrementCounter("scheduler_events", "startup")
+		s.metrics.SetGauge("scheduler_status", 1) // 1 表示运行中
+	}
 
 	logger.Info("Job scheduler started successfully")
 	return nil
@@ -120,11 +231,51 @@ func (s *Scheduler) Stop() {
 
 	logger.Info("Stopping job scheduler...")
 
+	// 创建追踪span
+	var ctx context.Context
+	var shutdownSpan interface{} // 使用interface{}避免nil检查问题
+
+	if s.tracer != nil {
+		var span interface{}
+		ctx, span = s.tracer.StartSpanWithAttributes(
+			context.Background(),
+			"scheduler_shutdown",
+			attribute.String("service.id", s.serviceID),
+		)
+		shutdownSpan = span
+		defer func() {
+			if sp, ok := shutdownSpan.(interface{ End() }); ok {
+				sp.End()
+			}
+		}()
+	} else {
+		ctx = context.Background()
+	}
+
+	// 如果启用ETCD，注销服务
+	if s.useEtcd && s.etcdManager != nil {
+		logger.Info("Deregistering scheduler service from etcd...")
+
+		serviceRegistry, err := s.etcdManager.NewServiceRegistry("distributed_job/services", 10)
+		if err == nil {
+			err = serviceRegistry.Deregister(ctx, "scheduler", s.serviceID)
+			if err != nil {
+				logger.Warnf("Failed to deregister service: %v", err)
+			}
+		}
+	}
+
 	// 停止接收新任务
 	s.cron.Stop()
 
 	// 发送取消信号给所有工作线程
 	s.cancel()
+
+	// 记录关闭事件
+	if s.metrics != nil {
+		s.metrics.IncrementCounter("scheduler_events", "shutdown")
+		s.metrics.SetGauge("scheduler_status", 0) // 0 表示已停止
+	}
 
 	s.isRunning = false
 	logger.Info("Job scheduler stopped")

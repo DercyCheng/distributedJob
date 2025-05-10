@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"distributedJob/internal/model/entity"
-	"distributedJob"
+	"distributedJob/pkg/logger"
 )
 
 // HTTPWorker 处理HTTP类型的任务

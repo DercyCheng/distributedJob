@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"distributedJob/internal/config"
-	"distributedJobtore"
-	"distributedJobtore/mysql/repository"
-	"distributedJob"
+	"distributedJob/internal/store"
+	"distributedJob/internal/store/mysql/repository"
+	"distributedJob/pkg/logger"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -106,4 +107,13 @@ func (m *MySQLManager) Close() error {
 		return err
 	}
 	return sqlDB.Close()
+}
+
+// Ping 检查数据库连接
+func (m *MySQLManager) Ping() error {
+	sqlDB, err := m.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Ping()
 }

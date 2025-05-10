@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"distributedJob/pkg/logger"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -18,6 +19,11 @@ type Config struct {
 	Auth     AuthConfig     `yaml:"auth"`
 	Job      JobConfig      `yaml:"job"`
 	Rpc      RpcConfig      `yaml:"rpc"`
+	Kafka    KafkaConfig    `yaml:"kafka"`
+	Etcd     EtcdConfig     `yaml:"etcd"`
+	Tracing  TracingConfig  `yaml:"tracing"`
+	Metrics  MetricsConfig  `yaml:"metrics"`
+	Logging  LoggingConfig  `yaml:"logging"`
 }
 
 // ServerConfig 服务器配置
