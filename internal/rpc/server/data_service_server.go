@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	pb "github.com/distributedJob/internal/rpc/proto"
-	"github.com/distributedJob/internal/service"
-	"github.com/distributedJob/pkg/logger"
+	pb "distributedJob/internal/rpc/proto"
+	"distributedJobervice"
+	"distributedJob"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

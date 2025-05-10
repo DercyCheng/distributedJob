@@ -3,7 +3,7 @@ package store
 import (
 	"time"
 
-	"github.com/distributedJob/internal/model/entity"
+	"distributedJob/internal/model/entity"
 )
 
 // TaskRepository 定义任务数据仓库接口

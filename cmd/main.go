@@ -10,16 +10,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/distributedJob/internal/api"
-	"github.com/distributedJob/internal/config"
-	"github.com/distributedJob/internal/job"
-	"github.com/distributedJob/internal/rpc/server"
-	"github.com/distributedJob/internal/service"
-	"github.com/distributedJob/internal/store"
-	"github.com/distributedJob/internal/store/mysql"
-	"github.com/distributedJob/internal/store/redis"
-	"github.com/distributedJob/pkg/logger"
-	"github.com/distributedJob/pkg/memory"
+	"distributedJob/internal/api"
+	"distributedJob/internal/config"
+	"distributedJob/internal/job"
+	"distributedJob/internal/rpc/server"
+	"distributedJob/internal/service"
+	"distributedJob/internal/store"
+	"distributedJob/internal/store/mysql"
+	"distributedJob/internal/store/redis"
+	"distributedJob/pkg/logger"
+	"distributedJob/pkg/memory"
 )
 
 var (

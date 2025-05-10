@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/pkg/logger"
 	"gopkg.in/yaml.v2"
 )
 

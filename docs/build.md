@@ -1760,9 +1760,9 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
        "testing"
        "time"
 
-       "github.com/distributedJob/internal/job"
-       "github.com/distributedJob/internal/model/entity"
-       "github.com/distributedJob/internal/service"
+       "distributedJob/internal/job"
+       "distributedJob/internal/model/entity"
+       "distributedJob/internal/service"
        "github.com/stretchr/testify/assert"
        "github.com/stretchr/testify/mock"
    )
@@ -1829,8 +1829,8 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
        "testing"
        "time"
 
-       "github.com/distributedJob/internal/model/entity"
-       "github.com/distributedJob/internal/service"
+       "distributedJob/internal/model/entity"
+       "distributedJob/internal/service"
        "github.com/stretchr/testify/assert"
        "github.com/stretchr/testify/mock"
        "golang.org/x/crypto/bcrypt"
@@ -1904,8 +1904,8 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
        "testing"
        "time"
 
-       "github.com/distributedJob/internal/job"
-       "github.com/distributedJob/internal/model/entity"
+       "distributedJob/internal/job"
+       "distributedJob/internal/model/entity"
        "github.com/stretchr/testify/assert"
        "github.com/stretchr/testify/mock"
    )
@@ -1978,8 +1978,8 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
        "time"
 
        "github.com/DATA-DOG/go-sqlmock"
-       "github.com/distributedJob/internal/model/entity"
-       "github.com/distributedJob/internal/store/mysql/repository"
+       "distributedJob/internal/model/entity"
+       "distributedJob/internal/store/mysql/repository"
        "github.com/stretchr/testify/assert"
        "gorm.io/driver/mysql"
        "gorm.io/gorm"
@@ -2031,10 +2031,10 @@ DistributedJob 采用多层测试策略，确保系统的稳定性和可靠性�
        "context"
        "testing"
 
-       "github.com/distributedJob/internal/job"
-       "github.com/distributedJob/internal/model/entity"
-       pb "github.com/distributedJob/internal/rpc/proto"
-       "github.com/distributedJob/internal/rpc/server"
+       "distributedJob/internal/job"
+       "distributedJob/internal/model/entity"
+       pb "distributedJob/internal/rpc/proto"
+       "distributedJob/internal/rpc/server"
        "github.com/stretchr/testify/assert"
        "github.com/stretchr/testify/mock"
    )
@@ -2102,11 +2102,11 @@ import (
     "testing"
     "time"
 
-    "github.com/distributedJob/internal/config"
-    "github.com/distributedJob/internal/job"
-    "github.com/distributedJob/internal/model/entity"
-    "github.com/distributedJob/internal/service"
-    "github.com/distributedJob/internal/store/mysql"
+    "distributedJob/internal/config"
+    "distributedJob/internal/job"
+    "distributedJob/internal/model/entity"
+    "distributedJob/internal/service"
+    "distributedJob/internal/store/mysql"
     "github.com/stretchr/testify/assert"
 )
 
@@ -2208,10 +2208,10 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/distributedJob/internal/api"
-    "github.com/distributedJob/internal/config"
-    "github.com/distributedJob/internal/job"
-    "github.com/distributedJob/internal/store/mysql"
+    "distributedJob/internal/api"
+    "distributedJob/internal/config"
+    "distributedJob/internal/job"
+    "distributedJob/internal/store/mysql"
     "github.com/gin-gonic/gin"
     "github.com/stretchr/testify/assert"
 )
@@ -2333,9 +2333,9 @@ import (
     "testing"
     "time"
 
-    "github.com/distributedJob/internal/config"
-    "github.com/distributedJob/internal/job"
-    "github.com/distributedJob/internal/model/entity"
+    "distributedJob/internal/config"
+    "distributedJob/internal/job"
+    "distributedJob/internal/model/entity"
 )
 
 func BenchmarkTaskScheduling(b *testing.B) {

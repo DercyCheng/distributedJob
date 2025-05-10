@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/distributedJob/internal/config"
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/internal/config"
+	"distributedJobodel/entity"
+	"distributedJob"
 	"github.com/robfig/cron/v3"
 )
 

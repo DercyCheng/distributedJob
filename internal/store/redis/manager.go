@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/distributedJob/internal/config"
+	"distributedJob/internal/config"
 	"github.com/go-redis/redis/v8"
 )
 

@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/distributedJob/internal/api/middleware"
-	"github.com/distributedJob/internal/config"
-	"github.com/distributedJob/internal/job"
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/internal/service"
-	"github.com/distributedJob/internal/store"
+	"distributedJob/internal/api/middleware"
+	"distributedJobonfig"
+	"distributedJobob"
+	"distributedJobodel/entity"
+	"distributedJobervice"
+	"distributedJobtore"
 	"github.com/gin-gonic/gin"
 )
 

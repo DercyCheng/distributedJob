@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/internal/model/entity"
+	"distributedJob"
 )
 
 // HTTPWorker 处理HTTP类型的任务

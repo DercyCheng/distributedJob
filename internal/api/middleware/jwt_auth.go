@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
-	"github.com/distributedJob/internal/config"
-	"github.com/distributedJob/internal/store"
+	"distributedJob/internal/config"
+	"distributedJobtore"
 	"github.com/gin-gonic/gin"
 )
 

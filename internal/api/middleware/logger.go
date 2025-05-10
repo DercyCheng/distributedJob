@@ -3,7 +3,7 @@ package middleware
 import (
 	"time"
 
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 

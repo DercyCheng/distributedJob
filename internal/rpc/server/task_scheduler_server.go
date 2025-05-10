@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/distributedJob/internal/job"
-	"github.com/distributedJob/internal/model/entity"
-	pb "github.com/distributedJob/internal/rpc/proto"
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/internal/job"
+	"distributedJobodel/entity"
+	pb "distributedJobpc/proto"
+	"distributedJob"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

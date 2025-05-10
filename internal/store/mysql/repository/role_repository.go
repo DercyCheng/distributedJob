@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/distributedJob/internal/model/entity"
+	"distributedJob/internal/model/entity"
 	"gorm.io/gorm"
 )
 

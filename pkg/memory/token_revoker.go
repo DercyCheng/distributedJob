@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/distributedJob/internal/store"
+	"distributedJob/internal/store"
 )
 
 // MemoryTokenRevoker implements TokenRevoker interface using memory map

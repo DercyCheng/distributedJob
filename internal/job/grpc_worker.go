@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/pkg/logger"
 )
 
 // GRPCWorker 处理GRPC类型的任务

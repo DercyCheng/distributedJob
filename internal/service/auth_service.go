@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/internal/store"
+	"distributedJob/internal/model/entity"
+	"distributedJobtore"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )

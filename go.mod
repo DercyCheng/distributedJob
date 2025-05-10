@@ -1,4 +1,4 @@
-module github.com/distributedJob
+module distributedJob
 
 go 1.22.3
 

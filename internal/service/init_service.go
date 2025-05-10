@@ -3,13 +3,13 @@ package service
 import (
 	"time"
 
-	"github.com/distributedJob/internal/config"
-	"github.com/distributedJob/internal/job"
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/internal/store"
-	"github.com/distributedJob/internal/store/redis"
-	"github.com/distributedJob/pkg/logger"
-	"github.com/distributedJob/pkg/memory"
+	"distributedJob/internal/config"
+	"distributedJob/internal/job"
+	"distributedJob/internal/model/entity"
+	"distributedJob/internal/store"
+	"distributedJob/internal/store/redis"
+	"distributedJob/pkg/logger"
+	"distributedJob/pkg/memory"
 	"golang.org/x/crypto/bcrypt"
 )
 

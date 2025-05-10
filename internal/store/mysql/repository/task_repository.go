@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/pkg/logger"
+	"distributedJob/internal/model/entity"
+	"distributedJob"
 	"gorm.io/gorm"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/distributedJob/internal/store"
+	"distributedJob/internal/store"
 	"github.com/go-redis/redis/v8"
 )
 

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/distributedJob/internal/job"
-	"github.com/distributedJob/internal/model/entity"
-	"github.com/distributedJob/internal/store"
+	"distributedJob/internal/job"
+	"distributedJobodel/entity"
+	"distributedJobtore"
 )
 
 // 定义错误
