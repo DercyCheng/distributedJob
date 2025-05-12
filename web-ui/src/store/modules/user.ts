@@ -1,20 +1,10 @@
 import { defineStore } from 'pinia'
-import { login, getUserInfo, refreshToken as apiRefreshToken } from '@/api/auth'
+import { login, getUserInfo, refreshToken as apiRefreshToken, UserInfo } from '@/api/auth'
 import { setToken, getToken, removeToken } from '@/utils/token'
 
 interface UserState {
   token: string
-  userInfo: {
-    id: number
-    username: string
-    name: string
-    email: string
-    departmentId: number
-    departmentName: string
-    roleId: number
-    roleName: string
-    permissions: string[]
-  }
+  userInfo: UserInfo
 }
 
 export const useUserStore = defineStore('user', {
@@ -45,12 +35,26 @@ export const useUserStore = defineStore('user', {
     async login(username: string, password: string) {
       try {
         const data = await login({ username, password })
-        this.token = data.token
-        setToken(data.token)
+        // 后端返回 accessToken，而不是 token
+        const accessToken = data.accessToken || data.token || ''
+        this.token = accessToken
+        setToken(accessToken)
         
         // 获取用户信息
-        if (data.user && data.user.id) {
-          this.userInfo = data.user
+        const userId = data.userId ?? 0
+        const userName = data.username ?? ''
+        if (userId) {
+          // 如果登录响应包含用户基本信息
+          this.userInfo = {
+            ...this.userInfo,
+            id: userId,
+            username: userName,
+            name: data.realName || '',
+            departmentId: data.departmentId || 0,
+            roleId: data.roleId || 0
+          }
+          // 获取完整用户信息（包括权限等）
+          await this.fetchUserInfo()
         } else {
           // If user info is not included in login response, fetch it separately
           await this.fetchUserInfo()
@@ -67,8 +71,22 @@ export const useUserStore = defineStore('user', {
     async fetchUserInfo() {
       try {
         const userInfo = await getUserInfo()
-        this.userInfo = userInfo
-        return userInfo
+        if (userInfo) {
+          // Convert possibly undefined values to their default types
+          this.userInfo = {
+            id: userInfo.id ?? 0,
+            username: userInfo.username ?? '',
+            name: userInfo.name ?? '',
+            email: userInfo.email ?? '',
+            departmentId: userInfo.departmentId ?? 0,
+            departmentName: userInfo.departmentName ?? '',
+            roleId: userInfo.roleId ?? 0,
+            roleName: userInfo.roleName ?? '',
+            permissions: userInfo.permissions ?? []
+          }
+          return this.userInfo
+        }
+        return this.userInfo
       } catch (error) {
         console.error('Failed to fetch user info:', error)
         throw error
@@ -83,8 +101,8 @@ export const useUserStore = defineStore('user', {
           throw new Error('No token to refresh')
         }
         
-        const response = await apiRefreshToken(currentToken)
-        const newToken = response.token
+        const response = await apiRefreshToken()
+        const newToken = response.accessToken || response.token || ''
         
         if (newToken) {
           this.token = newToken

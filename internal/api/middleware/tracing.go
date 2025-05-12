@@ -5,6 +5,8 @@ import (
 	"distributedJob/pkg/tracing"
 	"time"
 
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -86,7 +88,7 @@ func MetricsMiddleware(metrics *metrics.Metrics) gin.HandlerFunc {
 		metrics.IncrementCounter("requests_total",
 			c.Request.Method,
 			path,
-			string(c.Writer.Status()),
+			fmt.Sprint(c.Writer.Status()),
 		)
 
 		// 记录请求持续时间

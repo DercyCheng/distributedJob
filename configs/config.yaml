@@ -58,7 +58,7 @@ kafka:
 
 etcd:
   endpoints:
-    - localhost:2379
+    - localhost:12379
   dial_timeout: 5
   operation_timeout: 5
 

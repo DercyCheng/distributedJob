@@ -17,7 +17,7 @@ services:
     restart: always
     networks:
       - distributed_job_network
-      
+
   redis:
     image: redis:7.0
     container_name: distributed_job_redis
@@ -29,7 +29,7 @@ services:
     restart: always
     networks:
       - distributed_job_network
-      
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
     container_name: distributed_job_zookeeper
@@ -39,7 +39,7 @@ services:
       - "2181:2181"
     networks:
       - distributed_job_network
-      
+
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     container_name: distributed_job_kafka
@@ -57,7 +57,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     networks:
       - distributed_job_network
-      
+
   etcd:
     image: bitnami/etcd:3.5.9
     container_name: distributed_job_etcd
@@ -65,13 +65,13 @@ services:
       - ALLOW_NONE_AUTHENTICATION=yes
       - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
     ports:
-      - "2379:2379"
-      - "2380:2380"
+      - "12379:2379"
+      - "12380:2380"
     volumes:
       - etcd_data:/bitnami/etcd
     networks:
       - distributed_job_network
-      
+
   prometheus:
     image: prom/prometheus:v2.44.0
     container_name: distributed_job_prometheus
@@ -81,11 +81,11 @@ services:
       - ./configs/prometheus:/etc/prometheus
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
     networks:
       - distributed_job_network
-      
+
   grafana:
     image: grafana/grafana:9.5.1
     container_name: distributed_job_grafana
@@ -97,7 +97,7 @@ services:
       - prometheus
     networks:
       - distributed_job_network
-      
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
     container_name: distributed_job_elasticsearch
@@ -111,7 +111,7 @@ services:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
       - distributed_job_network
-      
+
   kibana:
     image: docker.elastic.co/kibana/kibana:8.8.0
     container_name: distributed_job_kibana
@@ -123,7 +123,7 @@ services:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     networks:
       - distributed_job_network
-      
+
   jaeger:
     image: jaegertracing/all-in-one:1.46
     container_name: distributed_job_jaeger

@@ -107,8 +107,9 @@ export async function autoRefreshToken(): Promise<boolean> {
   }
   
   try {
-    const response = await refreshToken(token)
-    const newToken = response.token
+    const response = await refreshToken()
+    // 后端可能返回token或accessToken
+    const newToken = response.accessToken || response.token || ''
     
     if (newToken) {
       setToken(newToken)

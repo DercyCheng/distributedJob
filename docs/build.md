@@ -85,55 +85,105 @@ DistributedJob 采用模块化设计，围绕几个核心组件构建，这些�
 ```
 distributedJob/
 ├── cmd/                  # 命令行应用程序入口点
-│   └── main.go       # 客户端入口点
+│   └── main.go           # 服务入口点
+├── configs/              # 配置文件目录
+│   ├── config.yaml       # 主配置文件
+│   └── prometheus/       # Prometheus 相关配置
+│       └── prometheus.yml # Prometheus 配置文件
+├── docs/                 # 文档目录
+│   └── build.md          # 构建和设计文档
 ├── internal/             # 私有应用程序和库代码
 │   ├── api/              # API 相关代码
+│   │   ├── server.go     # API 服务器
 │   │   ├── handler/      # HTTP 处理器
-│   │   ├── middleware/   # HTTP 中间件
-│   │   ├── router.go     # HTTP 路由定义
-│   │   └── server.go     # API 服务器
-│   ├── rpc/              # RPC 服务相关代码
-│   │   ├── proto/        # Protocol Buffers 定义
-│   │   ├── server/       # RPC 服务器实现
-│   │   └── client/       # RPC 客户端实现
-│   ├── auth/             # 认证和授权
-│   │   ├── department.go # 部门管理
-│   │   ├── permission.go # 权限控制
-│   │   └── user.go       # 用户管理
+│   │   │   ├── dashboard_handler.go # 仪表盘处理器
+│   │   │   └── health_handler.go    # 健康检查处理器
+│   │   └── middleware/   # HTTP 中间件
+│   │       ├── cors.go          # 跨域请求中间件
+│   │       ├── instrumentation.go # 监控中间件
+│   │       ├── jwt_auth.go      # JWT 认证中间件
+│   │       ├── logger.go        # 日志中间件
+│   │       └── tracing.go       # 链路追踪中间件
 │   ├── config/           # 配置管理
-│   │   └── config.go     # 配置结构和加载逻辑
+│   │   ├── config.go      # 配置结构和加载逻辑
+│   │   └── extended_config.go # 扩展配置
+│   ├── infrastructure/   # 基础设施
+│   │   └── infrastructure.go # 基础设施初始化和管理
 │   ├── job/              # 核心任务调度模块
-│   │   ├── scheduler.go  # 任务调度器
-│   │   ├── task.go       # 任务定义和管理
+│   │   ├── scheduler.go   # 任务调度器
 │   │   ├── http_worker.go # HTTP 任务执行器
 │   │   ├── grpc_worker.go # gRPC 任务执行器
-│   │   └── history.go    # 任务执行历史记录
+│   │   ├── options.go     # 调度器选项
+│   │   └── stats.go       # 任务统计
 │   ├── model/            # 数据模型
-│   │   ├── dto/          # 数据传输对象
 │   │   └── entity/       # 业务实体对象
-│   ├── store/            # 存储层
-│   │   ├── mysql/        # MySQL 实现
-│   │   │   └── repository/  # 数据访问对象
-│   │   └── repository.go # 存储接口定义
-│   └── service/          # 业务逻辑服务
-│       ├── task_service.go  # 任务服务实现
-│       ├── department_service.go  # 部门服务实现
-│       └── history_service.go  # 历史记录服务实现
+│   │       ├── department.go    # 部门实体
+│   │       ├── permission.go    # 权限实体
+│   │       ├── record.go        # 执行记录实体
+│   │       ├── role_permission.go # 角色权限关系实体
+│   │       ├── role.go          # 角色实体
+│   │       ├── task.go          # 任务实体
+│   │       └── user.go          # 用户实体
+│   ├── rpc/              # RPC 服务相关代码
+│   │   ├── client/       # RPC 客户端实现
+│   │   ├── proto/        # Protocol Buffers 定义
+│   │   │   ├── auth.proto        # 认证服务定义
+│   │   │   ├── data.proto        # 数据服务定义
+│   │   │   └── scheduler.proto   # 调度器服务定义
+│   │   └── server/       # RPC 服务器实现
+│   │       ├── auth_service_server.go   # 认证服务实现
+│   │       ├── data_service_server.go   # 数据服务实现
+│   │       ├── rpc_server.go            # RPC 服务器基础结构
+│   │       └── task_scheduler_server.go # 任务调度服务实现
+│   ├── service/          # 业务逻辑服务
+│   │   ├── auth_service.go  # 认证服务实现
+│   │   ├── init_service.go  # 初始化服务
+│   │   └── task_service.go  # 任务服务实现
+│   └── store/            # 存储层
+│       ├── repository.go    # 存储接口定义
+│       ├── token_revoker.go # 令牌撤销接口
+│       ├── etcd/            # ETCD 存储实现
+│       │   └── manager.go   # ETCD 管理器
+│       ├── kafka/           # Kafka 存储实现
+│       │   └── manager.go   # Kafka 管理器
+│       ├── mysql/           # MySQL 实现
+│       │   ├── manager.go   # MySQL 连接管理
+│       │   └── repository/  # 数据访问对象
+│       │       ├── department_repository.go # 部门仓库
+│       │       ├── permission_repository.go # 权限仓库
+│       │       ├── role_repository.go      # 角色仓库
+│       │       ├── task_repository.go      # 任务仓库
+│       │       └── user_repository.go      # 用户仓库
+│       └── redis/           # Redis 实现
+│           ├── manager.go      # Redis 连接管理
+│           └── token_revoker.go # 基于 Redis 的令牌撤销
 ├── pkg/                  # 可被外部应用程序使用的库
 │   ├── logger/           # 日志工具
-│   └── utils/            # 通用工具函数
-├── web/                  # 前端应用 (Vite 构建)
-│   ├── src/              # 源代码
-│   ├── public/           # 静态资源
-│   ├── index.html        # 入口 HTML
-│   ├── vite.config.js    # Vite 配置
-│   └── package.json      # 依赖配置
-├── configs/              # 配置文件目录
-│   └── config.yaml       # 主配置文件
+│   │   ├── context.go    # 日志上下文
+│   │   └── logger.go     # 日志实现
+│   ├── memory/           # 内存相关工具
+│   │   └── token_revoker.go # 内存令牌撤销实现
+│   ├── metrics/          # 指标监控
+│   │   ├── gauge_getter.go # 度量值获取
+│   │   └── metrics.go      # 指标监控实现
+│   ├── session/          # 会话管理
+│   └── tracing/          # 分布式追踪
+│       └── tracer.go     # 追踪器实现
 ├── scripts/              # 构建和部署脚本
-├── docs/                 # 文档目录
+│   └── init-db/          # 数据库初始化
+│       └── init.sql      # 初始化 SQL 脚本
+├── web-ui/               # 前端应用 (Vite 构建)
+│   ├── src/              # 源代码
+│   │   ├── api/          # API 客户端
+│   │   ├── components/   # UI 组件
+│   │   ├── router/       # 路由管理
+│   │   ├── store/        # 状态管理
+│   │   └── views/        # 页面视图
+│   ├── index.html        # 入口 HTML
+│   └── vite.config.ts    # Vite 配置
 ├── go.mod                # Go 模块依赖
-└── go.sum                # Go 模块校验和
+├── go.sum                # Go 模块校验和
+└── docker-compose.yml    # Docker Compose 配置
 ```
 
 ### 组件图
@@ -204,30 +254,51 @@ distributedJob/
 2. **任务调度**
 
    - 调度器扫描数据库中的活动任务
-   - 根据 Cron 表达式组织任务
-   - 当任务到期时，分发给相应的执行器
+   - 根据 Cron 表达式组织任务并分配执行上下文
+   - 支持分布式部署模式，通过 ETCD 实现分布式锁
+   - 可选启用 Kafka 支持，用于任务的可靠分发
+   - 任务执行上下文通过 JobContext 传递，包含完整的任务信息
+   - 调度器实现任务队列和并发控制，避免系统过载
 
 3. **任务执行**
 
-   - 执行器（HTTP 或 gRPC）执行任务
-   - 结果记录在执行历史中
-   - 根据配置，失败任务可能会重试
-   - 如果主要执行失败，则触发备用机制
+   - 支持 HTTP Worker 和 gRPC Worker 两种执行器类型
+   - 执行器负责任务执行、结果收集和错误处理
+   - HTTP Worker 支持多种 HTTP 方法、自定义请求头和请求体
+   - gRPC Worker 支持服务发现和自动重连
+   - 完善的重试机制，根据配置的重试次数和间隔进行重试
+   - 支持主备地址切换策略，当主地址执行失败时自动切换到备用地址
+   - 执行结果记录在执行历史中，支持按年月分表存储
+   - 提供完善的指标收集，支持 Prometheus 监控和 OpenTelemetry 追踪
 
-4. **用户交互**
+4. **用户身份与权限管理**
 
-   - 用户通过基于 Vite 构建的 Web 控制台或 API 与系统交互
-   - 强制执行身份验证和授权
-   - 用户可以管理任务、查看历史记录并配置部门/权限
+   - 完备的用户认证系统，包括登录、令牌验证和权限检查
+   - 实现基于 JWT 的双令牌机制 (Access Token + Refresh Token)
+   - 支持多种令牌撤销策略 (内存、Redis)，确保安全退出
+   - 部门-角色-权限三层设计，实现细粒度权限控制
+   - 角色与权限的多对多关系，支持灵活的权限分配
+   - 用户资源按部门隔离，确保数据安全
+
+5. **用户交互**
+
+   - 用户通过基于 Vue 3 + Vite 构建的现代化 Web 控制台与系统交互
+   - 完整的路由和状态管理，支持组件化开发
+   - 集成响应式布局和主题切换，提供良好的用户体验
+   - 支持仪表盘、任务管理、部门管理、用户管理、角色权限管理等功能
+   - HTTP API 和 gRPC API 双渠道接入，满足不同场景需求
 
 ### 设计原则
 
-- **模块化**：组件设计具有明确的边界和接口
-- **可扩展性**：无状态设计允许水平扩展
-- **弹性**：重试机制和备用方案确保可靠性
-- **安全性**：基于角色的访问控制模型，实现精细权限控制
-- **可观测性**：全面的日志记录和执行历史
-- **高性能通信**：使用 gRPC 实现高效的内部服务通信
+- **模块化设计**：系统按功能划分为明确的模块，各模块间通过接口交互，降低耦合度
+- **可扩展架构**：采用无状态设计，支持水平扩展，适应不同规模的部署需求
+- **高可用保障**：完善的重试机制、主备切换和分布式锁，确保任务调度的可靠性
+- **分布式友好**：支持多实例部署，通过 ETCD 协调，避免任务重复执行
+- **安全性设计**：实现基于部门-角色-权限的三层访问控制模型，JWT 双令牌机制保障系统安全
+- **可观测性**：集成日志、指标和分布式追踪，支持 Prometheus 监控和 OpenTelemetry 追踪
+- **高性能通信**：使用 gRPC 实现服务间高效通信，二进制序列化减少网络开销
+- **资源隔离**：基于部门的资源隔离设计，确保多租户场景下的数据安全
+- **开发友好**：合理的项目结构和接口设计，降低开发和维护难度
 
 ### RPC 通信
 
@@ -255,19 +326,24 @@ DistributedJob 系统现在使用 gRPC 作为 RPC 框架，实现高效的内部
 
 #### Protocol Buffers 定义
 
-DistributedJob 使用 Protocol Buffers 来定义 RPC 服务接口。以下是主要服务定义示例：
+DistributedJob 使用 Protocol Buffers 来定义 RPC 服务接口。系统提供了三个主要的 RPC 服务：
+
+1. **任务调度服务 (scheduler.proto)**
 
 ```protobuf
 syntax = "proto3";
 package scheduler;
 
-option go_package = "github.com/username/distributedJob/internal/rpc/proto;schedulerpb";
+option go_package = "distributedJob/internal/rpc/proto";
 
 service TaskScheduler {
   rpc ScheduleTask(ScheduleTaskRequest) returns (ScheduleTaskResponse);
   rpc PauseTask(TaskRequest) returns (TaskResponse);
   rpc ResumeTask(TaskRequest) returns (TaskResponse);
   rpc GetTaskStatus(TaskRequest) returns (TaskStatusResponse);
+  rpc ExecuteTaskImmediately(TaskRequest) returns (TaskResponse);
+  rpc BatchScheduleTasks(BatchScheduleTasksRequest) returns (BatchScheduleTasksResponse);
+  rpc DeleteTask(TaskRequest) returns (TaskResponse);
 }
 
 message ScheduleTaskRequest {
@@ -276,6 +352,8 @@ message ScheduleTaskRequest {
   string handler = 3;
   bytes params = 4;
   int32 max_retry = 5;
+  int64 department_id = 6;
+  int32 timeout = 7;
 }
 
 message ScheduleTaskResponse {
@@ -299,8 +377,201 @@ message TaskStatusResponse {
   string last_execute_time = 3;
   string next_execute_time = 4;
   int32 retry_count = 5;
+  int32 success_count = 6;
+  int32 fail_count = 7;
+  float avg_execution_time = 8;
+}
+
+message BatchScheduleTasksRequest {
+  repeated ScheduleTaskRequest tasks = 1;
+}
+
+message BatchScheduleTasksResponse {
+  repeated ScheduleTaskResponse results = 1;
+  bool overall_success = 2;
+  string message = 3;
 }
 ```
+
+2. **认证服务 (auth.proto)**
+
+```protobuf
+syntax = "proto3";
+package auth;
+
+option go_package = "distributedJob/internal/rpc/proto";
+
+service AuthService {
+  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc GetUserPermissions(UserPermissionsRequest) returns (UserPermissionsResponse);
+}
+
+message AuthenticateRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message AuthenticateResponse {
+  bool success = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  UserInfo user_info = 4;
+  string message = 5;
+}
+
+message UserInfo {
+  int64 user_id = 1;
+  string username = 2;
+  string real_name = 3;
+  int64 department_id = 4;
+  string department_name = 5;
+  int64 role_id = 6;
+  string role_name = 7;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  int64 user_id = 2;
+  string message = 3;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  bool success = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  string message = 4;
+}
+
+message UserPermissionsRequest {
+  int64 user_id = 1;
+}
+
+message UserPermissionsResponse {
+  bool success = 1;
+  repeated string permissions = 2;
+  string message = 3;
+}
+```
+
+3. **数据服务 (data.proto)**
+
+```protobuf
+syntax = "proto3";
+package data;
+
+option go_package = "distributedJob/internal/rpc/proto";
+
+service DataService {
+  rpc GetTaskHistory(TaskHistoryRequest) returns (TaskHistoryResponse);
+  rpc GetUserList(UserListRequest) returns (UserListResponse);
+  rpc GetDepartmentList(DepartmentListRequest) returns (DepartmentListResponse);
+  rpc GetTaskStatistics(TaskStatisticsRequest) returns (TaskStatisticsResponse);
+}
+
+message TaskHistoryRequest {
+  int64 task_id = 1;
+  string start_time = 2;
+  string end_time = 3;
+  int32 limit = 4;
+  int32 offset = 5;
+  int32 year = 6;
+  int32 month = 7;
+}
+
+message TaskHistoryRecord {
+  int64 id = 1;
+  int64 task_id = 2;
+  string task_name = 3;
+  bool success = 4;
+  int32 status_code = 5;
+  string response = 6;
+  int32 cost_time = 7;
+  string execute_time = 8;
+  int32 retry_times = 9;
+}
+
+message TaskHistoryResponse {
+  bool success = 1;
+  repeated TaskHistoryRecord records = 2;
+  int64 total = 3;
+  string message = 4;
+}
+
+message UserListRequest {
+  int64 department_id = 1;
+  int32 page = 2;
+  int32 size = 3;
+}
+
+message UserInfo {
+  int64 id = 1;
+  string username = 2;
+  string real_name = 3;
+  string email = 4;
+  string phone = 5;
+  int64 department_id = 6;
+  string department_name = 7;
+  int64 role_id = 8;
+  string role_name = 9;
+  int32 status = 10;
+  string create_time = 11;
+}
+
+message UserListResponse {
+  bool success = 1;
+  repeated UserInfo users = 2;
+  int64 total = 3;
+  string message = 4;
+}
+
+message DepartmentListRequest {
+  int32 page = 1;
+  int32 size = 2;
+}
+
+message Department {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  string create_time = 4;
+}
+
+message DepartmentListResponse {
+  bool success = 1;
+  repeated Department departments = 2;
+  int64 total = 3;
+  string message = 4;
+}
+
+message TaskStatisticsRequest {
+  int64 department_id = 1;
+  string start_time = 2;
+  string end_time = 3;
+}
+
+message TaskStatisticsResponse {
+  bool success = 1;
+  int32 task_count = 2;
+  float success_rate = 3;
+  float avg_execution_time = 4;
+  map<string, float> execution_stats = 5;
+  string message = 6;
+}
+```
+
+}
+
+````
 
 #### RPC 客户端示例
 
@@ -342,7 +613,7 @@ func main() {
 
   log.Printf("Task scheduled with ID: %d, Success: %v", resp.TaskId, resp.Success)
 }
-```
+````
 
 #### RPC 服务端实现
 
@@ -4515,3 +4786,201 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
    - 支持用户会话强制终止
    - 支持所有活跃令牌的批量撤销
    - 提供可疑活动的实时警报
+
+## 角色与权限管理系统(RBAC)
+
+### RBAC 模型概述
+
+DistributedJob 实现了基于部门-角色-权限的三层访问控制模型，提供精细的权限管理：
+
+1. **部门(Department)**：组织的基本单位，用于资源隔离
+2. **角色(Role)**：职责的抽象，如管理员、普通用户等
+3. **权限(Permission)**：具体操作的权限项，如创建任务、查看报表等
+
+### 权限设计
+
+系统权限采用"资源:操作"的命名模式，例如：
+
+- `task:create` - 创建任务的权限
+- `user:read` - 查看用户信息的权限
+- `system:admin` - 系统管理权限
+
+权限级别划分为：
+
+1. **系统级权限**：影响整个系统的操作权限
+2. **部门级权限**：限定在特定部门内的操作权限
+3. **资源级权限**：针对特定资源的操作权限
+
+### 角色权限关系
+
+角色与权限是多对多关系，通过 role_permission 表建立关联。系统预定义了几个基本角色：
+
+1. **超级管理员**：拥有所有权限
+2. **部门管理员**：管理部门内的用户和任务
+3. **普通用户**：使用系统基本功能
+4. **只读用户**：只能查看而无法修改数据
+
+下面是角色权限关系的表示：
+
+```go
+// 角色实体
+type Role struct {
+    ID          int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+    Name        string    `json:"name" gorm:"type:varchar(50);not null;uniqueIndex:idx_name"`
+    Description string    `json:"description" gorm:"type:varchar(255)"`
+    Status      int8      `json:"status" gorm:"type:tinyint(4);not null;default:1"`
+    CreateTime  time.Time `json:"createTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP"`
+    UpdateTime  time.Time `json:"updateTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
+    Permissions []Permission `json:"permissions" gorm:"many2many:role_permission"`
+}
+
+// 权限实体
+type Permission struct {
+    ID          int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+    Name        string    `json:"name" gorm:"type:varchar(50);not null"`
+    Code        string    `json:"code" gorm:"type:varchar(50);not null;uniqueIndex:idx_code"`
+    Description string    `json:"description" gorm:"type:varchar(255)"`
+    Status      int8      `json:"status" gorm:"type:tinyint(4);not null;default:1"`
+    CreateTime  time.Time `json:"createTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP"`
+    UpdateTime  time.Time `json:"updateTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
+}
+
+// 角色权限关联表
+type RolePermission struct {
+    ID           int64     `json:"id" gorm:"primaryKey;autoIncrement"`
+    RoleID       int64     `json:"roleId" gorm:"column:role_id;not null;uniqueIndex:idx_role_perm"`
+    PermissionID int64     `json:"permissionId" gorm:"column:permission_id;not null;uniqueIndex:idx_role_perm"`
+    CreateTime   time.Time `json:"createTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP"`
+    UpdateTime   time.Time `json:"updateTime" gorm:"type:datetime;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
+}
+```
+
+### 权限检查流程
+
+1. **API 层检查**：通过中间件对 API 请求进行权限检查
+2. **服务层检查**：在关键业务逻辑中二次验证权限
+3. **资源隔离**：确保用户只能访问所属部门的资源
+4. **权限缓存**：缓存用户权限，减少数据库查询
+
+具体实现如下：
+
+```go
+// JWT认证中间件
+func JWTAuthMiddleware(authService service.AuthService) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        token := c.GetHeader("Authorization")
+        if token == "" {
+            response.Fail(c, response.CodeUnauthorized, "请先登录")
+            c.Abort()
+            return
+        }
+
+        // Bearer Token格式处理
+        if len(token) > 7 && token[0:7] == "Bearer " {
+            token = token[7:]
+        }
+
+        // 验证令牌
+        userID, err := authService.ValidateToken(token)
+        if err != nil {
+            response.Fail(c, response.CodeUnauthorized, "无效的令牌")
+            c.Abort()
+            return
+        }
+
+        // 设置用户ID到上下文
+        c.Set("userID", userID)
+        c.Next()
+    }
+}
+
+// 权限检查中间件
+func PermissionMiddleware(authService service.AuthService, requiredPermissions ...string) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        userID, exists := c.Get("userID")
+        if !exists {
+            response.Fail(c, response.CodeUnauthorized, "请先登录")
+            c.Abort()
+            return
+        }
+
+        // 获取用户权限
+        permissions, err := authService.GetUserPermissions(userID.(int64))
+        if err != nil {
+            response.Fail(c, response.CodeInternalError, "获取权限失败")
+            c.Abort()
+            return
+        }
+
+        // 检查是否有超级管理员权限
+        if contains(permissions, "system:admin") {
+            c.Next()
+            return
+        }
+
+        // 检查是否有所需权限
+        hasPermission := false
+        for _, required := range requiredPermissions {
+            if contains(permissions, required) {
+                hasPermission = true
+                break
+            }
+        }
+
+        if !hasPermission {
+            response.Fail(c, response.CodeForbidden, "权限不足")
+            c.Abort()
+            return
+        }
+
+        c.Next()
+    }
+}
+```
+
+### 部门资源隔离
+
+系统严格实施基于部门的资源隔离，确保多租户安全：
+
+1. 任务资源按部门隔离，只有同部门用户可查看和管理
+2. 用户账号与部门绑定，限制跨部门访问
+3. 报表和统计数据按部门筛选
+4. 超级管理员可以跨部门管理资源
+
+实现示例：
+
+```go
+// 获取任务列表的服务层实现
+func (s *taskService) GetTaskList(userID int64, page, size int) ([]*entity.Task, int64, error) {
+    // 获取用户信息
+    user, err := s.userRepo.GetUserByID(userID)
+    if err != nil {
+        return nil, 0, err
+    }
+
+    // 获取用户权限
+    permissions, err := s.authService.GetUserPermissions(userID)
+    if err != nil {
+        return nil, 0, err
+    }
+
+    // 如果具有超级管理员权限，可以查看所有部门的任务
+    if contains(permissions, "system:admin") {
+        return s.taskRepo.GetAllTasks(page, size)
+    }
+
+    // 普通用户只能查看本部门任务
+    return s.taskRepo.GetTasksByDepartmentID(user.DepartmentID, page, size)
+}
+```
+
+### 权限模型最佳实践
+
+系统采用以下权限管理最佳实践：
+
+1. **最小权限原则**：默认分配最小权限集合，遵循最小权限原则
+2. **职责分离**：将敏感操作权限分配给不同角色，实现职责分离
+3. **权限审计**：记录关键权限变更操作，便于安全审计
+4. **权限模板**：预设角色权限模板，便于批量权限管理
+5. **动态权限调整**：支持根据业务需要动态调整权限策略
+6. **权限可视化**：前端提供权限树形结构可视化管理界面
