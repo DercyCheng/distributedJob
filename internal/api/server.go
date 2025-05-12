@@ -1992,12 +1992,17 @@ func (s *Server) parseValidationError(err error) []map[string]string {
 
 	// 解析验证错误信息
 	// 根据字段名称检测错误类型
-	fieldNames := []string{"name", "cron", "type", "description", "config", "departmentId", "status"}
+	fieldNames := []string{"name", "cron", "type", "taskType", "description", "config", "departmentId", "status", "url", "httpMethod", "grpcService", "grpcMethod"}
 	for _, field := range fieldNames {
 		if strings.Contains(errorString, field) {
+			errorMsg := fmt.Sprintf("%s 字段验证失败", field)
+			// 添加更具体的错误信息
+			if strings.Contains(errorString, "empty") || strings.Contains(errorString, "cannot be empty") {
+				errorMsg = fmt.Sprintf("%s 不能为空", field)
+			}
 			validationErrors = append(validationErrors, map[string]string{
 				"field": field,
-				"error": fmt.Sprintf("%s 字段验证失败", field),
+				"error": errorMsg,
 			})
 		}
 	}

@@ -4,8 +4,25 @@
  * @returns {boolean} - True if URL is external
  */
 export function isExternal(path: string): boolean {
-  const externalPattern = /^(https?:|mailto:|tel:)/
+  if (!path || typeof path !== 'string') return false
+  const externalPattern = /^(https?:|mailto:|tel:)/i
   return externalPattern.test(path)
+}
+
+/**
+ * Validate URL format
+ * @param {string} url - URL to validate
+ * @returns {boolean} - True if URL is valid
+ */
+export function isValidURL(url: string): boolean {
+  if (!url || typeof url !== 'string') return false
+
+  try {
+    const parsedUrl = new URL(url)
+    return ['http:', 'https:'].includes(parsedUrl.protocol)
+  } catch (e) {
+    return false
+  }
 }
 
 /**
@@ -35,6 +52,9 @@ export function validatePassword(str: string): boolean {
  * @returns {boolean} - True if email is valid
  */
 export function validateEmail(email: string): boolean {
-  const validPattern = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/
-  return validPattern.test(email)
+  if (!email || typeof email !== 'string') return false
+
+  // More comprehensive email validation pattern
+  const validPattern = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+  return validPattern.test(email.toLowerCase())
 }

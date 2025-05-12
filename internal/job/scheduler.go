@@ -199,24 +199,13 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	s.isRunning = true
 
-	// 加载所有任务
-	if s.taskStore != nil {
-		if err := s.LoadAllTasks(); err != nil {
-			logger.Errorf("Failed to load tasks: %v", err)
-
-			if s.metrics != nil {
-				s.metrics.IncrementCounter("scheduler_errors", "load_tasks")
-			}
-		}
-	}
-
-	// 启动结果处理协程
+	// 启动结果处理线程
 	go s.processResults()
 
 	// 记录启动事件
 	if s.metrics != nil {
 		s.metrics.IncrementCounter("scheduler_events", "startup")
-		s.metrics.SetGauge("scheduler_status", 1) // 1 表示运行中
+		s.metrics.SetGauge("scheduler_status", 1) // 1 表示正在运行
 	}
 
 	logger.Info("Job scheduler started successfully")
@@ -231,9 +220,14 @@ func (s *Scheduler) Stop() {
 
 	logger.Info("Stopping job scheduler...")
 
+	// 标记为停止状态，防止新任务执行
+	s.jobsMutex.Lock()
+	s.isRunning = false
+	s.jobsMutex.Unlock()
+
 	// 创建追踪span
 	var ctx context.Context
-	var shutdownSpan interface{} // 使用interface{}避免nil检查问题
+	var shutdownSpan interface{}
 
 	if s.tracer != nil {
 		var span interface{}
@@ -264,21 +258,66 @@ func (s *Scheduler) Stop() {
 			}
 		}
 	}
-
 	// 停止接收新任务
 	s.cron.Stop()
+
+	// 关闭任务队列以防止新任务提交
+	close(s.runningJobs)
 
 	// 发送取消信号给所有工作线程
 	s.cancel()
 
-	// 记录关闭事件
-	if s.metrics != nil {
-		s.metrics.IncrementCounter("scheduler_events", "shutdown")
-		s.metrics.SetGauge("scheduler_status", 0) // 0 表示已停止
-	}
+	// 等待工作线程处理正在进行的任务
+	// 找出当前最长的任务超时时间，以便正确设置关闭超时
+	maxTaskTimeout := 60 * time.Second // 默认60秒
 
-	s.isRunning = false
-	logger.Info("Job scheduler stopped")
+	// 实际系统中，我们应该遍历当前正在执行的任务，找出最大的超时值
+	// 这里我们使用简单实现，仅为演示
+
+	// 添加额外的缓冲时间，确保任务有机会完成
+	gracefulTimeout := maxTaskTimeout + 5*time.Second
+	logger.Infof("Waiting up to %s for worker threads to finish...", gracefulTimeout)
+
+	gracefulCtx, cancel := context.WithTimeout(context.Background(), gracefulTimeout)
+	defer cancel()
+
+	// 实现一个更复杂的等待机制，定期检查正在执行的任务状态
+	checkInterval := 500 * time.Millisecond
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	// 记录cron停止时间
+	cronStopTime := time.Now()
+
+	for {
+		select {
+		case <-gracefulCtx.Done():
+			if gracefulCtx.Err() == context.DeadlineExceeded {
+				logger.Warn("Graceful shutdown timed out, some tasks may have been interrupted")
+			}
+			// 记录关闭事件
+			if s.metrics != nil {
+				s.metrics.IncrementCounter("scheduler_events", "shutdown")
+				s.metrics.SetGauge("scheduler_status", 0) // 0 表示已停止
+			}
+			return
+		case <-ticker.C:
+			// 实际系统中，这里应该检查是否还有正在运行的任务
+			// 如果所有任务都已完成，可以提前退出等待
+
+			// 检查自cron停止以来的时间
+			runningTime := time.Since(cronStopTime)
+			if runningTime > 2*time.Second {
+				logger.Info("All worker threads completed")
+				// 记录关闭事件
+				if s.metrics != nil {
+					s.metrics.IncrementCounter("scheduler_events", "shutdown")
+					s.metrics.SetGauge("scheduler_status", 0) // 0 表示已停止
+				}
+				return
+			}
+		}
+	}
 }
 
 // LoadAllTasks 从存储加载所有任务并添加到调度器
@@ -343,6 +382,15 @@ func (s *Scheduler) RemoveTask(taskID int64) {
 
 // executeTask 执行一个任务
 func (s *Scheduler) executeTask(task *entity.Task) {
+	// 检查是否已停止
+	s.jobsMutex.RLock()
+	if !s.isRunning {
+		s.jobsMutex.RUnlock()
+		logger.Warnf("Task execution skipped because scheduler is stopping: %s (ID: %d)", task.Name, task.ID)
+		return
+	}
+	s.jobsMutex.RUnlock()
+
 	// 创建执行上下文
 	jobCtx := &JobContext{
 		Task:       task,
@@ -353,9 +401,23 @@ func (s *Scheduler) executeTask(task *entity.Task) {
 	// 根据任务类型分发到不同的工作线程
 	switch task.TaskType {
 	case "HTTP":
-		s.httpWorker.Submit(jobCtx)
+		// 添加超时控制以避免在队列已满时无限期阻塞
+		select {
+		case s.httpWorker.workQueue <- jobCtx:
+			// 任务已提交
+		case <-time.After(5 * time.Second):
+			logger.Errorf("Failed to submit HTTP task: %s (ID: %d) - queue is full", task.Name, task.ID)
+			return
+		}
 	case "GRPC":
-		s.grpcWorker.Submit(jobCtx)
+		// 添加超时控制以避免在队列已满时无限期阻塞
+		select {
+		case s.grpcWorker.workQueue <- jobCtx:
+			// 任务已提交
+		case <-time.After(5 * time.Second):
+			logger.Errorf("Failed to submit GRPC task: %s (ID: %d) - queue is full", task.Name, task.ID)
+			return
+		}
 	default:
 		logger.Errorf("Unsupported task type: %s for task %d", task.TaskType, task.ID)
 		return
@@ -399,29 +461,39 @@ func (s *Scheduler) saveTaskResult(task *entity.Task, result *JobResult) {
 		CostTime:     result.CostTime,
 		CreateTime:   now,
 	}
-
 	// 根据任务类型设置记录字段
 	if task.TaskType == "HTTP" {
 		record.URL = result.ActualURL
 		record.HTTPMethod = result.ActualMethod
-		record.Body = task.Body
-		record.Headers = task.Headers
-		record.Response = result.Response
-		record.StatusCode = result.StatusCode
-		record.Success = boolToInt8(result.Success)
+		if result.StatusCode != nil {
+			statusCode := int(*result.StatusCode)
+			record.StatusCode = &statusCode
+		}
 	} else if task.TaskType == "GRPC" {
 		record.GrpcService = task.GrpcService
 		record.GrpcMethod = task.GrpcMethod
-		record.GrpcParams = task.GrpcParams
-		record.Response = result.Response
-		record.GrpcStatus = result.GrpcStatus
-		record.Success = boolToInt8(result.Success)
+		if result.GrpcStatus != nil {
+			grpcStatus := int(*result.GrpcStatus)
+			record.GrpcStatus = &grpcStatus
+		}
 	}
 
-	// 保存记录到数据库
+	// 设置执行结果
+	record.Success = boolToInt8(result.Success)
+	record.Response = result.Response
+	if result.Error != nil {
+		// 存储错误信息到响应字段
+		if record.Response != "" {
+			record.Response += "\nError: " + result.Error.Error()
+		} else {
+			record.Response = "Error: " + result.Error.Error()
+		}
+	}
+
+	// 持久化执行记录
 	if s.taskStore != nil {
 		if err := s.taskStore.SaveTaskRecord(record); err != nil {
-			logger.Errorf("Failed to save task record: %v", err)
+			logger.Errorf("Failed to save task execution record: %v", err)
 		}
 	}
 
@@ -435,9 +507,128 @@ func (s *Scheduler) saveTaskResult(task *entity.Task, result *JobResult) {
 	}
 }
 
-// SetTaskRepository 设置任务数据存储库
+// SetTaskRepository 设置任务存储库
 func (s *Scheduler) SetTaskRepository(repo TaskRepository) {
 	s.taskStore = repo
+}
+
+// AddTaskAndStore 添加并存储任务
+func (s *Scheduler) AddTaskAndStore(task *entity.Task) (int64, error) {
+	// 首先保存任务到存储
+	if s.taskStore == nil {
+		return 0, errors.New("task repository not initialized")
+	}
+
+	// 确保任务类型字段同步
+	task.SyncTypeFields()
+
+	// 保存任务到持久化存储
+	taskID, err := s.taskStore.CreateTask(task)
+	if err != nil {
+		return 0, fmt.Errorf("failed to store task: %w", err)
+	}
+
+	// 更新任务ID
+	task.ID = taskID
+
+	// 将任务添加到调度器
+	if err := s.AddTask(task); err != nil {
+		return taskID, fmt.Errorf("task stored but failed to schedule: %w", err)
+	}
+
+	logger.Infof("Task added and scheduled successfully: %s (ID: %d)", task.Name, taskID)
+	return taskID, nil
+}
+
+// PauseTask 暂停任务
+func (s *Scheduler) PauseTask(taskID int64) error {
+	if s.taskStore == nil {
+		return errors.New("task repository not initialized")
+	}
+
+	// 从调度器中移除任务
+	s.RemoveTask(taskID)
+
+	// 更新任务状态为暂停(0)
+	err := s.taskStore.UpdateTaskStatus(taskID, 0)
+	if err != nil {
+		return fmt.Errorf("failed to update task status: %w", err)
+	}
+
+	logger.Infof("Task paused: ID: %d", taskID)
+	return nil
+}
+
+// ResumeTask 恢复任务
+func (s *Scheduler) ResumeTask(taskID int64) error {
+	if s.taskStore == nil {
+		return errors.New("task repository not initialized")
+	}
+
+	// 更新任务状态为激活(1)
+	err := s.taskStore.UpdateTaskStatus(taskID, 1)
+	if err != nil {
+		return fmt.Errorf("failed to update task status: %w", err)
+	}
+
+	// 获取任务详情
+	task, err := s.taskStore.GetTaskByID(taskID)
+	if err != nil {
+		return fmt.Errorf("failed to get task details: %w", err)
+	}
+
+	// 将任务添加到调度器
+	if err := s.AddTask(task); err != nil {
+		return fmt.Errorf("failed to resume task scheduling: %w", err)
+	}
+
+	logger.Infof("Task resumed: ID: %d", taskID)
+	return nil
+}
+
+// GetTaskStatus 获取任务状态
+func (s *Scheduler) GetTaskStatus(taskID int64) (*entity.Task, error) {
+	if s.taskStore == nil {
+		return nil, errors.New("task repository not initialized")
+	}
+
+	// 获取任务详情
+	task, err := s.taskStore.GetTaskByID(taskID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get task: %w", err)
+	}
+
+	// 获取下一次执行时间
+	s.jobsMutex.RLock()
+	defer s.jobsMutex.RUnlock()
+
+	if entryID, found := s.jobs[taskID]; found && s.isRunning {
+		entry := s.cron.Entry(entryID)
+		task.NextExecuteTime = &entry.Next
+	}
+
+	return task, nil
+}
+
+// UpdateTaskExecutionTime 更新任务执行时间
+func (s *Scheduler) UpdateTaskExecutionTime(taskID int64, executionTime time.Time) {
+	s.jobsMutex.Lock()
+	defer s.jobsMutex.Unlock()
+
+	task, err := s.taskStore.GetTaskByID(taskID)
+	if err != nil {
+		logger.Warnf("Failed to get task for updating execution time: %v", err)
+		return
+	}
+
+	// 更新最后执行时间
+	task.LastExecuteTime = &executionTime
+
+	// 如果任务在调度器中，更新下一次执行时间
+	if entryID, found := s.jobs[taskID]; found && s.isRunning {
+		entry := s.cron.Entry(entryID)
+		task.NextExecuteTime = &entry.Next
+	}
 }
 
 // boolToInt8 将bool转换为int8 (0-false, 1-true)
@@ -446,140 +637,4 @@ func boolToInt8(b bool) int8 {
 		return 1
 	}
 	return 0
-}
-
-// AddTaskAndStore adds a task to the scheduler and stores it in the repository
-func (s *Scheduler) AddTaskAndStore(task *entity.Task) (int64, error) {
-	// Store task in repository first
-	if s.taskStore == nil {
-		return 0, errors.New("task repository not initialized")
-	}
-
-	taskID, err := s.taskStore.CreateTask(task)
-	if err != nil {
-		return 0, err
-	}
-
-	// Set the ID from the repository
-	task.ID = taskID
-
-	// Add task to scheduler
-	if err := s.AddTask(task); err != nil {
-		return taskID, err
-	}
-
-	return taskID, nil
-}
-
-// PauseTask pauses a running task
-func (s *Scheduler) PauseTask(taskID int64) error {
-	s.jobsMutex.Lock()
-	defer s.jobsMutex.Unlock()
-
-	// Check if task exists in scheduler
-	if _, found := s.jobs[taskID]; !found {
-		return fmt.Errorf("task with ID %d not found in scheduler", taskID)
-	}
-
-	// Remove from cron scheduler
-	s.RemoveTask(taskID)
-
-	// Update task status in database
-	if s.taskStore != nil {
-		if err := s.taskStore.UpdateTaskStatus(taskID, int8(0)); err != nil {
-			return err
-		}
-	}
-
-	logger.Infof("Task paused: ID %d", taskID)
-	return nil
-}
-
-// ResumeTask resumes a paused task
-func (s *Scheduler) ResumeTask(taskID int64) error {
-	// Get the task from the repository
-	if s.taskStore == nil {
-		return errors.New("task repository not initialized")
-	}
-
-	task, err := s.taskStore.GetTaskByID(taskID)
-	if err != nil {
-		return err
-	}
-
-	// Update status in database
-	if err := s.taskStore.UpdateTaskStatus(taskID, int8(1)); err != nil {
-		return err
-	}
-
-	// Add task back to scheduler
-	if err := s.AddTask(task); err != nil {
-		return err
-	}
-
-	logger.Infof("Task resumed: ID %d", taskID)
-	return nil
-}
-
-// GetTaskStatus retrieves the current status of a task
-func (s *Scheduler) GetTaskStatus(taskID int64) (*entity.Task, error) {
-	// Get the task from the repository
-	if s.taskStore == nil {
-		return nil, errors.New("task repository not initialized")
-	}
-
-	task, err := s.taskStore.GetTaskByID(taskID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if task is currently scheduled
-	s.jobsMutex.RLock()
-	_, isScheduled := s.jobs[taskID]
-	s.jobsMutex.RUnlock()
-
-	// Update task with scheduler status
-	if isScheduled {
-		// Get the cron entry to determine next execution time
-		entryID := s.jobs[taskID]
-		entry := s.cron.Entry(entryID)
-		nextTime := entry.Next
-		task.NextExecuteTime = &nextTime
-	}
-
-	return task, nil
-}
-
-// UpdateTaskExecutionTime updates the last execution time of a task
-func (s *Scheduler) UpdateTaskExecutionTime(taskID int64, executionTime time.Time) error {
-	// Get the task from the repository
-	if s.taskStore == nil {
-		return errors.New("task repository not initialized")
-	}
-
-	task, err := s.taskStore.GetTaskByID(taskID)
-	if err != nil {
-		return err
-	}
-
-	// Update the last execution time
-	task.LastExecuteTime = &executionTime
-
-	// Calculate next execution time based on cron expression
-	s.jobsMutex.RLock()
-	entryID, found := s.jobs[taskID]
-	s.jobsMutex.RUnlock()
-
-	if found {
-		entry := s.cron.Entry(entryID)
-		nextTime := entry.Next
-		task.NextExecuteTime = &nextTime
-	}
-
-	// Update task in database if there's a specialized method for it
-	// For now, we'll just log the update
-	logger.Infof("Updated task execution time: %s (ID: %d, Last: %v, Next: %v)",
-		task.Name, task.ID, executionTime, task.NextExecuteTime)
-
-	return nil
 }

@@ -9,8 +9,8 @@ import (
 	"distributedJob/internal/config"
 	"distributedJob/internal/store"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // AccessClaims 访问令牌的JWT声明
@@ -20,13 +20,13 @@ type AccessClaims struct {
 	DepartmentID int64    `json:"departmentId"`
 	RoleID       int64    `json:"roleId"`
 	Permissions  []string `json:"permissions"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // RefreshClaims 刷新令牌的JWT声明
 type RefreshClaims struct {
 	UserID int64 `json:"userId"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // JWTAuth JWT认证中间件
@@ -139,10 +139,10 @@ func GenerateAccessToken(
 		DepartmentID: departmentID,
 		RoleID:       roleID,
 		Permissions:  permissions,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expireTime.Unix(),
-			IssuedAt:  time.Now().Unix(),
-			Id:        generateTokenID(userID),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expireTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ID:        generateTokenID(userID),
 			Issuer:    "distributed-job-system",
 			Subject:   fmt.Sprintf("%d", userID),
 		},
@@ -165,10 +165,10 @@ func GenerateRefreshToken(
 	// 创建声明
 	claims := RefreshClaims{
 		UserID: userID,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expireTime.Unix(),
-			IssuedAt:  time.Now().Unix(),
-			Id:        generateRefreshTokenID(userID),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expireTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ID:        generateRefreshTokenID(userID),
 			Issuer:    "distributed-job-system",
 			Subject:   fmt.Sprintf("%d", userID),
 		},
@@ -187,14 +187,24 @@ func ParseAccessToken(tokenString string, secret string, tokenRevoker store.Toke
 	})
 
 	if err != nil {
+		// 处理特定错误
+		if strings.Contains(err.Error(), "token is expired") {
+			return nil, errors.New("token has expired")
+		}
 		return nil, err
 	}
 
 	// 验证token是否有效
 	if claims, ok := token.Claims.(*AccessClaims); ok && token.Valid {
 		// 检查令牌是否被撤销
-		if tokenRevoker != nil && tokenRevoker.IsRevoked(claims.Id) {
-			return nil, errors.New("token has been revoked")
+		if tokenRevoker != nil {
+			jti := claims.ID
+			if jti == "" {
+				return nil, errors.New("invalid token id")
+			}
+			if tokenRevoker.IsRevoked(jti) {
+				return nil, errors.New("token has been revoked")
+			}
 		}
 		return claims, nil
 	}
@@ -210,14 +220,23 @@ func ParseRefreshToken(tokenString string, secret string, tokenRevoker store.Tok
 	})
 
 	if err != nil {
+		// 处理令牌过期错误
+		if strings.Contains(err.Error(), "token is expired") {
+			return nil, errors.New("refresh token has expired")
+		}
 		return nil, err
 	}
-
 	// 验证token是否有效
 	if claims, ok := token.Claims.(*RefreshClaims); ok && token.Valid {
 		// 检查令牌是否被撤销
-		if tokenRevoker != nil && tokenRevoker.IsRevoked(claims.Id) {
-			return nil, errors.New("refresh token has been revoked")
+		if tokenRevoker != nil {
+			jti := claims.ID
+			if jti == "" {
+				return nil, errors.New("invalid refresh token id")
+			}
+			if tokenRevoker.IsRevoked(jti) {
+				return nil, errors.New("refresh token has been revoked")
+			}
 		}
 		return claims, nil
 	}

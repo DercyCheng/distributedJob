@@ -3,12 +3,13 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"distributedJob/internal/model/entity"
 	"distributedJob/internal/store"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -63,13 +64,13 @@ type AuthService interface {
 // AccessClaims 访问令牌的JWT声明
 type AccessClaims struct {
 	UserID int64 `json:"user_id"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // RefreshClaims 刷新令牌的JWT声明
 type RefreshClaims struct {
 	UserID int64 `json:"user_id"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 // authService 认证服务实现
@@ -192,10 +193,10 @@ func (s *authService) generateAccessToken(userID int64) (string, error) {
 
 	claims := AccessClaims{
 		UserID: userID,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expireTime.Unix(),
-			IssuedAt:  nowTime.Unix(),
-			Id:        fmt.Sprintf("%d", userID),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expireTime),
+			IssuedAt:  jwt.NewNumericDate(nowTime),
+			ID:        fmt.Sprintf("%d", userID),
 			Subject:   fmt.Sprintf("%d", userID),
 		},
 	}
@@ -211,10 +212,10 @@ func (s *authService) generateRefreshToken(userID int64) (string, error) {
 
 	claims := RefreshClaims{
 		UserID: userID,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expireTime.Unix(),
-			IssuedAt:  nowTime.Unix(),
-			Id:        fmt.Sprintf("refresh_%d_%s", userID, uuid.New().String()),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expireTime),
+			IssuedAt:  jwt.NewNumericDate(nowTime),
+			ID:        fmt.Sprintf("refresh_%d_%s", userID, uuid.New().String()),
 			Subject:   fmt.Sprintf("%d", userID),
 		},
 	}
@@ -263,6 +264,9 @@ func (s *authService) ValidateToken(tokenString string) (int64, error) {
 
 	// 验证令牌
 	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return 0, errors.New("token has expired")
+		}
 		return 0, err
 	}
 
@@ -278,7 +282,11 @@ func (s *authService) ValidateToken(tokenString string) (int64, error) {
 	}
 
 	// 检查令牌是否被撤销
-	if s.IsTokenRevoked(claims.Id) {
+	jti := claims.ID
+	if jti == "" {
+		return 0, errors.New("invalid token id")
+	}
+	if s.IsTokenRevoked(jti) {
 		return 0, errors.New("token has been revoked")
 	}
 
@@ -294,6 +302,9 @@ func (s *authService) ValidateRefreshToken(tokenString string) (int64, error) {
 
 	// 验证令牌
 	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return 0, errors.New("refresh token has expired")
+		}
 		return 0, err
 	}
 
@@ -309,7 +320,12 @@ func (s *authService) ValidateRefreshToken(tokenString string) (int64, error) {
 	}
 
 	// 检查令牌是否被撤销
-	if s.IsTokenRevoked(claims.Id) {
+	jti := claims.ID
+	if jti == "" {
+		return 0, errors.New("invalid refresh token id")
+	}
+
+	if s.IsTokenRevoked(jti) {
 		return 0, errors.New("refresh token has been revoked")
 	}
 
@@ -318,38 +334,42 @@ func (s *authService) ValidateRefreshToken(tokenString string) (int64, error) {
 
 // RevokeToken 撤销令牌
 func (s *authService) RevokeToken(tokenString string) error {
-	var claims jwt.StandardClaims
+	var jti string
+	var expTime time.Time
 
 	// 尝试作为访问令牌解析
-	token, _ := jwt.ParseWithClaims(tokenString, &AccessClaims{}, func(token *jwt.Token) (interface{}, error) {
+	accessToken, _ := jwt.ParseWithClaims(tokenString, &AccessClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
 
-	if token != nil && token.Valid {
-		if accessClaims, ok := token.Claims.(*AccessClaims); ok {
-			claims = accessClaims.StandardClaims
+	if accessToken != nil && accessToken.Valid {
+		if accessClaims, ok := accessToken.Claims.(*AccessClaims); ok {
+			jti = accessClaims.ID
+			expTime = accessClaims.ExpiresAt.Time
 		}
 	} else {
 		// 尝试作为刷新令牌解析
-		token, _ = jwt.ParseWithClaims(tokenString, &RefreshClaims{}, func(token *jwt.Token) (interface{}, error) {
+		refreshToken, _ := jwt.ParseWithClaims(tokenString, &RefreshClaims{}, func(token *jwt.Token) (interface{}, error) {
 			return s.jwtRefreshSecret, nil
 		})
 
-		if token != nil && token.Valid {
-			if refreshClaims, ok := token.Claims.(*RefreshClaims); ok {
-				claims = refreshClaims.StandardClaims
+		if refreshToken != nil && refreshToken.Valid {
+			if refreshClaims, ok := refreshToken.Claims.(*RefreshClaims); ok {
+				jti = refreshClaims.ID
+				expTime = refreshClaims.ExpiresAt.Time
 			}
 		} else {
 			return errors.New("invalid token")
 		}
 	}
 
-	// 获取令牌 ID 和过期时间
-	jti := claims.Id
-	exp := time.Unix(claims.ExpiresAt, 0)
+	// 检查是否成功解析了令牌
+	if jti == "" {
+		return errors.New("could not extract token ID")
+	}
 
 	// 将令牌加入黑名单
-	ttl := exp.Sub(time.Now())
+	ttl := expTime.Sub(time.Now())
 	if ttl <= 0 {
 		return nil // 令牌已过期，无需撤销
 	}

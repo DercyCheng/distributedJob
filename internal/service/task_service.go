@@ -109,6 +109,7 @@ func (s *taskService) GetTaskByID(id int64) (*entity.Task, error) {
 func (s *taskService) CreateHTTPTask(task *entity.Task) (int64, error) {
 	// 设置任务类型为HTTP
 	task.TaskType = TaskTypeHTTP
+	task.SyncTypeFields() // 同步Type和TaskType字段
 
 	// 校验任务参数
 	if err := s.validateHTTPTask(task); err != nil {
@@ -134,6 +135,7 @@ func (s *taskService) CreateHTTPTask(task *entity.Task) (int64, error) {
 func (s *taskService) CreateGRPCTask(task *entity.Task) (int64, error) {
 	// 设置任务类型为GRPC
 	task.TaskType = TaskTypeGRPC
+	task.SyncTypeFields() // 同步Type和TaskType字段
 
 	// 校验任务参数
 	if err := s.validateGRPCTask(task); err != nil {
@@ -168,6 +170,7 @@ func (s *taskService) UpdateHTTPTask(task *entity.Task) error {
 
 	// 设置任务类型为HTTP
 	task.TaskType = TaskTypeHTTP
+	task.SyncTypeFields() // 同步Type和TaskType字段
 
 	// 校验任务参数
 	if err := s.validateHTTPTask(task); err != nil {
@@ -202,6 +205,7 @@ func (s *taskService) UpdateGRPCTask(task *entity.Task) error {
 
 	// 设置任务类型为GRPC
 	task.TaskType = TaskTypeGRPC
+	task.SyncTypeFields() // 同步Type和TaskType字段
 
 	// 校验任务参数
 	if err := s.validateGRPCTask(task); err != nil {
@@ -257,6 +261,12 @@ func (s *taskService) UpdateTaskStatus(id int64, status int8) error {
 	}
 
 	// 检查状态是否有效
+	// 前端使用active (1), paused (0)；后端使用 TaskStatusEnabled (1), TaskStatusDisabled (2)
+	// 处理前端传入的0，转换为禁用状态2
+	if status == 0 {
+		status = TaskStatusDisabled
+	}
+
 	if status != TaskStatusEnabled && status != TaskStatusDisabled {
 		return ErrInvalidParameters
 	}

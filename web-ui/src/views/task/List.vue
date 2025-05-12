@@ -241,8 +241,15 @@ const handleCurrentChange = (val: number) => {
 
 // Handle task status change
 const handleStatusChange = async (row: Task) => {
+  // Store the original status to restore in case of failure
+  const originalStatus = row.status;
+  
+  // Set the new status optimistically (for better UX)
+  const newStatus = originalStatus === "active" ? "paused" : "active";
+  row.status = newStatus;
+  
   try {
-    if (row.status === "active") {
+    if (newStatus === "active") {
       await resumeTask(row.id);
       ElMessage.success("任务已启用");
     } else {
@@ -253,7 +260,10 @@ const handleStatusChange = async (row: Task) => {
     console.error("Failed to change task status:", error);
     ElMessage.error("更改任务状态失败");
     // Revert UI status on error
-    row.status = row.status === "active" ? "paused" : "active";
+    row.status = originalStatus;
+    
+    // Refresh the task list to ensure UI is in sync with backend
+    fetchTaskList();
   }
 };
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -58,11 +59,13 @@ func (h *HealthHandler) Check(c *gin.Context) {
 		dbStatus.Status = "UNKNOWN"
 		dbStatus.Message = "Database component is not initialized"
 	}
-	status.Components["database"] = dbStatus
-	// 检查Redis
+	status.Components["database"] = dbStatus // 检查Redis
 	redisStatus := Status{Status: "UP"}
 	if h.infra.Redis != nil {
-		if err := h.infra.Redis.Ping(c.Request.Context()); err != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+
+		if err := h.infra.Redis.Ping(ctx); err != nil {
 			redisStatus.Status = "DOWN"
 			redisStatus.Message = err.Error()
 			status.Status = "DOWN"
@@ -85,11 +88,13 @@ func (h *HealthHandler) Check(c *gin.Context) {
 		kafkaStatus.Message = "Kafka component is not initialized"
 	}
 	status.Components["kafka"] = kafkaStatus
-
 	// 检查ETCD
 	etcdStatus := Status{Status: "UP"}
 	if h.infra.Etcd != nil {
-		_, err := h.infra.Etcd.Get(c, "/health-check")
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+
+		_, err := h.infra.Etcd.Get(ctx, "/health-check")
 		if err != nil {
 			// 如果是找不到键，这不算故障
 			if err.Error() != "key not found: /health-check" {

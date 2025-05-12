@@ -33,6 +33,12 @@ func NewHTTPWorker(workers int, jobQueue chan *JobContext) *HTTPWorker {
 	return &HTTPWorker{
 		client: &http.Client{
 			Timeout: 60 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				DisableCompression:  false,
+			},
 		},
 		workers:     workers,
 		workQueue:   jobQueue,
@@ -76,8 +82,8 @@ func (w *HTTPWorker) startWorker(ctx context.Context, id int) {
 }
 
 // Submit 提交一个HTTP任务到工作队列
-func (w *HTTPWorker) Submit(job *JobContext) {
-	w.workQueue <- job
+func (w *HTTPWorker) Submit(job *JobContext) chan<- *JobContext {
+	return w.workQueue
 }
 
 // Results 返回结果队列
@@ -118,15 +124,20 @@ func (w *HTTPWorker) processHTTPJob(job *JobContext) *JobResult {
 			}
 		}
 	}
-
 	// 如果主URL失败且配置了备用URL，尝试备用URL
 	if err != nil && task.FallbackURL != "" {
 		logger.Infof("Using fallback URL for HTTP job: %s (ID: %d)", task.Name, task.ID)
 		result.UseFallback = true
 		result.ActualURL = task.FallbackURL
-		response, err = w.executeHTTPRequest(task, result)
+		var fallbackErr error
+		response, fallbackErr = w.executeHTTPRequest(task, result)
+		// 如果备用URL成功，使用备用URL的结果
+		if fallbackErr == nil {
+			err = nil
+		} else {
+			logger.Warnf("Fallback URL also failed for HTTP job: %s (ID: %d), Error: %v", task.Name, task.ID, fallbackErr)
+		}
 	}
-
 	// 设置执行结果
 	if err != nil {
 		result.Success = false
@@ -137,12 +148,29 @@ func (w *HTTPWorker) processHTTPJob(job *JobContext) *JobResult {
 		statusCode := response.StatusCode
 		result.StatusCode = &statusCode
 		result.Success = statusCode >= 200 && statusCode < 300
-
 		// 读取响应内容
-		body, _ := ioutil.ReadAll(response.Body)
+		body, readErr := ioutil.ReadAll(response.Body)
+		// 关闭响应体，防止内存泄漏
 		defer response.Body.Close()
 
-		result.Response = string(body)
+		if readErr != nil {
+			logger.Warnf("Failed to read response body for task %d: %v", task.ID, readErr)
+			result.Response = fmt.Sprintf("Error reading response: %v", readErr)
+		} else {
+			// 检查响应内容大小，避免存储过大的响应
+			if len(body) > 1024*1024 { // 超过1MB
+				logger.Warnf("Response body for task %d is too large (%d bytes), truncating", task.ID, len(body))
+				result.Response = string(body[:1024*1024]) + "... [TRUNCATED]"
+			} else {
+				result.Response = string(body)
+			}
+
+			// 记录响应内容类型
+			contentType := response.Header.Get("Content-Type")
+			if contentType != "" {
+				logger.Debugf("Response content type for task %d: %s", task.ID, contentType)
+			}
+		}
 	}
 
 	// 计算执行耗时
@@ -160,9 +188,31 @@ func (w *HTTPWorker) executeHTTPRequest(task *entity.Task, result *JobResult) (*
 		reqBody = &bytes.Buffer{}
 	}
 
-	req, err := http.NewRequest(task.HTTPMethod, result.ActualURL, reqBody)
+	// 使用任务配置的超时或默认60秒
+	timeout := 60 * time.Second
+	if task.Timeout > 0 {
+		timeout = time.Duration(task.Timeout) * time.Second
+	}
+
+	// 覆盖客户端默认超时，确保使用任务特定的超时
+	client := &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+			DisableCompression:  false,
+		},
+	}
+
+	// 创建一个可取消的context
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// 使用context创建请求，确保超时能正确传播
+	req, err := http.NewRequestWithContext(ctx, task.HTTPMethod, result.ActualURL, reqBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// 设置请求头
@@ -181,11 +231,29 @@ func (w *HTTPWorker) executeHTTPRequest(task *entity.Task, result *JobResult) (*
 		}
 	}
 
+	// 记录开始执行请求的时间，用于调试超时问题
+	startTime := time.Now()
+	logger.Debugf("Starting HTTP request for task %d with timeout %v", task.ID, timeout)
+
 	// 执行请求
-	resp, err := w.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
+		elapsedTime := time.Since(startTime)
+
+		// 详细区分不同类型的错误，特别是超时和取消
+		if ctx.Err() == context.DeadlineExceeded {
+			logger.Warnf("HTTP request timed out after %v (limit: %v) for task %d", elapsedTime, timeout, task.ID)
+			return nil, fmt.Errorf("request timed out after %v (configured timeout: %v)", elapsedTime, timeout)
+		}
+		if ctx.Err() == context.Canceled {
+			logger.Warnf("HTTP request was canceled after %v for task %d", elapsedTime, task.ID)
+			return nil, fmt.Errorf("request was canceled after %v", elapsedTime)
+		}
+
+		logger.Warnf("HTTP request failed after %v for task %d: %v", elapsedTime, task.ID, err)
 		return nil, err
 	}
 
+	logger.Debugf("HTTP request completed in %v for task %d with status %d", time.Since(startTime), task.ID, resp.StatusCode)
 	return resp, nil
 }
