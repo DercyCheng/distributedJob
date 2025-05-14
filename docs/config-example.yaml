@@ -1,0 +1,110 @@
+# configs/config.yaml 配置文件示例
+app:
+  name: DistributedJob
+  environment: production
+  version: 1.0.0
+
+api:
+  addr: :8000
+  readTimeout: 30
+  writeTimeout: 30
+  idleTimeout: 60
+  shutdownTimeout: 10
+  allowedOrigins:
+    - "*"
+  jwt:
+    secret: ${JWT_SECRET}
+    accessExpiration: 60 # 60 分钟
+    refreshExpiration: 24 # 24 小时
+  rateLimiting:
+    enabled: true
+    requestsPerMinute: 100
+
+rpc:
+  enabled: true
+  addr: :9090
+
+database:
+  driver: mysql
+  host: mysql # docker-compose 服务名称
+  port: 3306
+  username: distributed_job
+  password: ${MYSQL_PASSWORD} # 从环境变量获取
+  database: distributed_job
+  sslMode: disable
+  maxConns: 25
+  idleConns: 10
+
+redis:
+  addr: redis:6379 # docker-compose 服务名称
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - etcd:2379 # docker-compose 服务名称
+  username: ""
+  password: ""
+
+kafka:
+  brokers:
+    - kafka:29092 # docker-compose 内部地址
+  consumerGroup: distributed-job
+  consumerTopics:
+    - job-events
+  producerTopic: job-results
+
+logging:
+  level: info
+  format: json
+  destination: stdout
+  file: /var/log/distributedjob/app.log
+
+monitoring:
+  enabled: true
+  prometheusAddr: :9091
+  tracingEnabled: true
+  tracingURL: http://tempo:14268/api/traces
+
+jobs:
+  workerCount: 10
+  queueSize: 200
+  defaultRetry: 3
+
+ai:
+  agent:
+    enabled: true
+    defaultLLM: deepseekv3-7b # 使用本地 DeepseekV3 低尺寸模型
+    tools:
+      - scheduler-tool
+      - data-tool
+      - system-tool
+  mcp:
+    provider: local # 使用本地模型
+    defaultModel: deepseekv3-7b
+    apiKey: ${OPENAI_API_KEY} # 保留用于混合部署场景
+    local_models:
+      enabled: true
+      api_server:
+        url: "http://llm-server:8080" # docker-compose 服务名称
+        compatible_with: "openai"
+      models:
+        - name: "qwen3-1.8b" # qwen3 模型系列
+          path: "qwen3-1.8b-q4_k_m.gguf"
+        - name: "qwen3-4b"
+          path: "qwen3-4b-q5_k_m.gguf"
+        - name: "qwen3-7b"
+          path: "qwen3-7b-q5_k_m.gguf"
+        - name: "deepseekv3-7b" # deepseekv3 低尺寸模型系列
+          path: "deepseekv3-7b-q5_k_m.gguf"
+        - name: "deepseekv3-coder-7b"
+          path: "deepseekv3-coder-7b-q5_k_m.gguf"
+        - name: "deepseekv3-lite-4b"
+          path: "deepseekv3-lite-4b-q5_k_m.gguf"
+  rag:
+    vectorStore: qdrant # 使用 docker-compose 中的 qdrant 服务
+    vectorStoreURL: http://qdrant:6333 # docker-compose 服务地址
+    embeddingProvider: local
+    embeddingModel: bge-base
+    chunkSize: 1000
+    chunkOverlap: 200
