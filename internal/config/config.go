@@ -24,6 +24,7 @@ type Config struct {
 	Tracing  TracingConfig  `yaml:"tracing"`
 	Metrics  MetricsConfig  `yaml:"metrics"`
 	Logging  LoggingConfig  `yaml:"logging"`
+	AI       *AIConfig      `yaml:"ai"` // AI 相关配置
 }
 
 // ServerConfig 服务器配置

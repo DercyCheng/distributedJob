@@ -135,6 +135,60 @@ services:
     networks:
       - distributed_job_network
 
+  # AI组件: PostgreSQL with pgvector扩展，用于向量存储
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: distributed_job_pgvector
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vector_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-vector-db.sql:/docker-entrypoint-initdb.d/init-vector-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - distributed_job_network
+
+  # AI组件: Qdrant向量数据库
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: distributed_job_qdrant
+    ports:
+      - "6333:6333" # HTTP
+      - "6334:6334" # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT_ALLOW_CORS=true
+    networks:
+      - distributed_job_network
+
+  # AI组件: 本地LLM服务，使用Ollama
+  ollama:
+    image: ollama/ollama:latest
+    container_name: distributed_job_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    command: serve
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - distributed_job_network
+
 networks:
   distributed_job_network:
     driver: bridge
@@ -151,4 +205,10 @@ volumes:
   grafana_data:
     driver: local
   elasticsearch_data:
+    driver: local
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  ollama_data:
     driver: local

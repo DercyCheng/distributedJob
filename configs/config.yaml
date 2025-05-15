@@ -85,3 +85,47 @@ logging:
     index: distributed_job_logs
     username: ""
     password: ""
+
+# 添加AI配置
+ai:
+  enabled: true
+  mcp:
+    clients:
+      default:
+        type: "openai"
+        api_key: "${OPENAI_API_KEY}"
+        base_url: "https://api.openai.com/v1"
+        default_model: "gpt-3.5-turbo"
+        timeout: 60
+      local:
+        type: "local"
+        base_url: "http://localhost:8000"
+        default_model: "deepseek-chat"
+        timeout: 60
+  rag:
+    embeddings:
+      default:
+        type: "openai"
+        api_key: "${OPENAI_API_KEY}"
+        model: "text-embedding-3-small"
+    vector_stores:
+      default:
+        type: "memory"
+        namespace: "default"
+    retriever:
+      default:
+        k: 5
+        filter_threshold: 0.7
+    chunk_size: 1000
+    chunk_overlap: 200
+  agent:
+    tools:
+      scheduler-tool: true
+      data-tool: true
+      system-tool: true
+    memory:
+      type: "buffer"
+      capacity: 100
+  common:
+    temp_dir: "./temp"
+    max_tokens: 4096

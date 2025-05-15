@@ -1,164 +1,168 @@
+<div align="center"><h1>DistributedJob</h1></div>
 
 <div align="center">
-  <h1>DistributedJob</h1>
-  <h3>高性能分布式任务调度系统</h3>
+  <img src="https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/AI%20Powered-8A2BE2?style=for-the-badge" alt="AI Powered">
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License: MIT">
 </div>
 
-![Go Version](https://img.shields.io/badge/go-1.23+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+一个功能强大的分布式任务调度系统，集成了 AI 智能代理、RAG 检索增强生成以及 MCP 模型上下文协议的功能。该系统可以可靠地处理各种类型的计划任务，从简单的 HTTP 请求到复杂的 GRPC 服务调用，同时拥有 AI 增强的能力，支持智能分析和决策。
 
-## 项目简介
+## ✨ 特性
 
-DistributedJob 是一个功能强大、高可用的分布式任务调度系统，基于 Go 语言开发，提供任务的可靠调度、执行和监控。系统支持多种类型的任务执行方式，包括 HTTP 回调和 gRPC 调用，同时具备完整的用户权限管理和系统监控能力。
+- **分布式任务调度**：强大的任务调度引擎，支持 Cron 表达式和精确调度
+- **多种任务类型**：支持 HTTP 和 GRPC 任务类型，灵活处理不同场景
+- **重试机制**：任务失败自动重试，可配置重试次数和间隔
+- **故障转移**：内置故障转移机制，确保任务可靠执行
+- **AI 能力集成**：
+  - **智能代理**：基于 LLM 的智能代理，可执行多种工具和任务
+  - **RAG 系统**：检索增强生成系统，支持文档处理和智能信息检索
+  - **MCP 支持**：实现 Model Context Protocol，支持 Anthropic 和 OpenAI 等模型
+- **分布式协调**：通过 etcd 实现节点协调和领导者选举
+- **消息队列**：使用 Kafka 实现任务分发和负载均衡
+- **可观测性**：集成 Prometheus 监控和 OpenTelemetry 分布式追踪
+- **权限管理**：基于 RBAC 的完整权限管理系统
+- **现代化 Web UI**：Vue3 构建的友好管理界面
 
-## 主要特性
+## 📋 先决条件
 
-- **分布式调度**: 基于 etcd 实现分布式锁，确保任务不重复执行
-- **多种执行方式**: 支持 HTTP 回调和 gRPC 协议执行任务
-- **可靠性保障**:
-  - Kafka 消息队列支持，确保任务不丢失
-  - 任务重试机制，处理临时故障
-  - 事务支持，确保数据一致性
-- **权限管理**: 完整的用户、角色、权限和部门管理
-- **可观测性**:
-  - Prometheus 指标收集
-  - Jaeger 分布式跟踪
-  - 结构化日志支持
-- **高性能**:
-  - 协程池管理
-  - 连接池优化
-  - 并发控制
-- **Web界面**: 现代化 Vue3 前端，支持任务管理和监控
+- Go 1.18+
+- Docker 和 Docker Compose
+- MySQL 8.0+
+- Redis 7.0+
+- Kafka (可选，用于分布式任务队列)
+- etcd (可选，用于分布式协调)
+- Vector 数据库 (可选，用于 RAG 嵌入存储)
 
-## 系统架构
+## 🚀 快速开始
 
-DistributedJob 采用现代化的微服务架构，主要由以下组件构成:
+### 使用 Docker Compose
 
-- **核心调度服务**: 负责任务调度和分发
-- **API服务**: RESTful API，提供管理接口
-- **RPC服务**: gRPC 接口，用于任务执行和服务间通信
-- **Web界面**: Vue3 构建的管理界面
-- **存储层**: MySQL 用于持久化数据，Redis 用于缓存
-- **消息队列**: Kafka 用于任务分发
-- **服务协调**: etcd 用于服务发现和分布式锁
-- **可观测性组件**: Prometheus, Grafana, Jaeger, Elasticsearch
+最简单的方式是使用 Docker Compose 来启动整个系统：
 
-## 快速开始
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/distributedJob.git
+cd distributedJob
 
-### 系统要求
+# 启动所有服务
+docker-compose up -d
+```
 
-- Go 1.23+
-- Docker & Docker Compose
-- Node.js 14+
+### 手动启动
 
-### 使用 Docker Compose 启动
+1. **准备数据库**
 
-1. 克隆代码库
+```bash
+# MySQL初始化
+mysql -u root -p < scripts/init-db/init.sql
 
-   ```bash
-   git clone https://github.com/yourusername/distributedJob.git
-   cd distributedJob
-   ```
-2. 使用 Docker Compose 启动所有组件
+# 初始化向量数据库(如果使用RAG功能)
+mysql -u root -p < scripts/init-vector-db.sql
+```
 
-   ```bash
-   docker-compose up -d
-   ```
+2. **构建并运行**
 
-   这将启动所有必要的组件，包括:
+```bash
+# 构建项目
+go build -o distributed-job ./cmd
 
-   - MySQL 数据库
-   - Redis 缓存
-   - Kafka & Zookeeper
-   - etcd 服务
-   - Prometheus & Grafana
-   - Elasticsearch & Kibana
-   - Jaeger 链路追踪
-3. 访问服务
+# 运行服务
+./distributed-job --config configs/config.yaml
+```
 
-   - API服务: http://localhost:8080/v1
-   - Web界面: http://localhost:8080
-   - Grafana: http://localhost:3000
-   - Jaeger UI: http://localhost:16686
-   - Kibana: http://localhost:5601
+3. **访问 Web 界面**
 
-### 手动部署
+打开浏览器访问： `http://localhost:8080`
 
-1. 准备依赖组件 (可参考 docker-compose.yml)
-2. 编译服务
+## ⚙️ 配置
 
-   ```bash
-   go build -o distributedJob ./cmd
-   ```
-3. 配置服务
-
-   ```bash
-   cp configs/config.yaml.example configs/config.yaml
-   # 编辑配置文件以适应你的环境
-   ```
-4. 初始化数据库
-
-   ```bash
-   mysql -u root -p < scripts/init-db/init.sql
-   ```
-5. 启动服务
-
-   ```bash
-   ./distributedJob --config configs/config.yaml
-   ```
-6. 构建并部署前端
-
-   ```bash
-   cd web-ui
-   npm install
-   npm run build
-   # 将生成的 dist 目录部署到 web 服务器
-   ```
-
-## 配置说明
-
-主要配置文件位于 `configs/config.yaml`，包含以下配置项:
+主要配置文件位于 `configs/config.yaml`。您可以根据需要调整以下关键配置：
 
 ```yaml
 server:
   host: 0.0.0.0
   port: 8080
   context_path: /v1
-  shutdown_timeout: 30
 
 database:
   url: localhost:3306
   username: root
   password: root
   schema: distributed_job
-
-redis:
-  url: localhost:6379
-  password: ""
-  db: 0
-
-# 更多配置项...
+# 其他配置项...
 ```
 
-## API 
+## 📚 架构
 
-系统提供完整的 RESTful API:
+DistributedJob 采用模块化设计，围绕几个核心组件构建：
 
-- **认证接口**: 用户登录、注销、刷新令牌
-- **用户管理**: 创建、查询、更新用户信息
-- **角色权限**: 角色分配、权限管理
-- **部门管理**: 部门层级结构管理
-- **任务管理**: 任务的创建、执行、查询和控制
-- **系统监控**: 健康检查、性能指标收集
+- **任务调度器**：负责任务的调度和执行
+- **HTTP/GRPC 工作器**：处理不同类型的任务执行
+- **AI 控制器**：整合 Agent、MCP 和 RAG 功能
+- **Web API**：提供 RESTful 接口管理任务和系统
+- **存储层**：包含 MySQL、Redis、Vector 数据库等多种存储
 
-## 贡献指南
+更多架构细节，请参考 [架构文档](docs/structure.md)。
 
-欢迎提交 Issue 和 Pull Request 贡献代码。在提交 PR 前，请确保:
+## 🧠 AI 功能
 
-1. 代码风格符合项目规范
-2. 提供完整的单元测试和集成测试
-3. 必要时更新文档
+系统集成了三个主要的 AI 功能模块：
 
-## 许可证
+1. **Agent 智能代理**：
 
-本项目采用 MIT 许可证。
+   - 基于 LLM 的智能代理可执行复杂任务
+   - 支持多种工具集成，包括数据工具、调度工具和系统工具
+
+2. **RAG 检索增强生成**：
+
+   - 文档处理和分块能力
+   - 多种 Embedding 提供者支持
+   - 智能信息检索和生成
+
+3. **MCP 模型上下文协议**：
+
+   - 支持 Anthropic、OpenAI 等模型
+   - 上下文管理和窗口控制
+   - 流式处理能力
+
+更多 AI 功能的细节，请参考 [AI 功能文档](docs/ai.md)。
+
+## 🔧 API 参考
+
+API 文档可通过启动服务后访问 Swagger UI 查看：
+`http://localhost:8080/swagger/index.html`
+
+主要 API 端点包括：
+
+- `/v1/task`：任务管理 API
+- `/v1/auth`：认证和权限管理
+- `/v1/ai`：AI 功能 API
+- `/v1/dashboard`：仪表盘数据 API
+
+## 🧪 测试
+
+运行单元测试：
+
+```bash
+go test ./...
+```
+
+运行集成测试：
+
+```bash
+go test -tags=integration ./...
+```
+
+## 🤝 贡献
+
+欢迎贡献！请查看[贡献指南](CONTRIBUTING.md)了解如何开始。
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详情请参见[LICENSE](LICENSE)文件。
+
+## 📞 联系方式
+
+如有任何问题或建议，请开启一个 issue 或联系项目维护者。

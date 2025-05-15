@@ -26,6 +26,7 @@ type Server struct {
 	scheduler    *job.Scheduler
 	taskService  service.TaskService
 	authService  service.AuthService
+	aiService    *service.AIService
 	tokenRevoker store.TokenRevoker
 	infraManager *infrastructure.Infrastructure // 添加基础设施管理器
 }
@@ -139,6 +140,7 @@ func NewServer(
 	scheduler *job.Scheduler,
 	repoManager store.RepositoryManager,
 	authService service.AuthService,
+	aiService *service.AIService,
 	tokenRevoker store.TokenRevoker,
 	infraManager *infrastructure.Infrastructure,
 ) *Server {
@@ -157,12 +159,14 @@ func NewServer(
 
 	// 创建服务
 	taskService := service.NewTaskService(repoManager.Task(), scheduler)
+
 	s := &Server{
 		config:       config,
 		router:       router,
 		scheduler:    scheduler,
 		taskService:  taskService,
 		authService:  authService,
+		aiService:    aiService,
 		tokenRevoker: tokenRevoker,
 		infraManager: infraManager,
 	}
@@ -199,6 +203,64 @@ func (s *Server) setupRoutes() {
 
 	// 服务关闭API仅限本地访问
 	base.GET("/shutdown", s.localOnly(), s.shutdown)
+
+	// 注册AI处理器
+	if s.aiService != nil {
+		// 创建并注册各类AI处理器
+		aiHandler := handler.NewAIHandler(s.aiService)
+
+		// 创建并注册集成AI处理器
+		integratedAIHandler := handler.NewIntegratedAIHandler(s.aiService)
+		integratedAIHandler.RegisterRoutes(base)
+
+		// 创建并注册Agent处理器
+		agentHandler := handler.NewAgentHandler(s.aiService)
+
+		// 创建并注册MCP处理器
+		mcpHandler := handler.NewMCPHandler(s.aiService)
+
+		// 创建并注册RAG处理器
+		ragHandler := handler.NewRAGHandler(s.aiService)
+
+		// 注册API路由
+		apiGroup := base.Group("/api/v1")
+
+		// 注册Agent路由
+		agentGroup := apiGroup.Group("/agents")
+		{
+			agentGroup.GET("", agentHandler.ListAgents)
+			agentGroup.POST("", agentHandler.CreateAgent)
+			agentGroup.GET("/:id", agentHandler.GetAgent)
+			agentGroup.DELETE("/:id", agentHandler.DeleteAgent)
+			agentGroup.POST("/:id/execute", agentHandler.ExecuteAgent)
+		}
+
+		// 注册MCP路由
+		mcpGroup := apiGroup.Group("/mcp")
+		{
+			mcpGroup.GET("/models", mcpHandler.ListModels)
+			mcpGroup.POST("/chat", mcpHandler.Chat)
+			mcpGroup.POST("/stream-chat", mcpHandler.StreamChat)
+			mcpGroup.GET("/usage", mcpHandler.GetUsage)
+		}
+
+		// 注册RAG路由
+		ragGroup := apiGroup.Group("/rag")
+		{
+			ragGroup.POST("/documents", ragHandler.UploadDocument)
+			ragGroup.GET("/documents", ragHandler.ListDocuments)
+			ragGroup.GET("/documents/:id", ragHandler.GetDocument)
+			ragGroup.DELETE("/documents/:id", ragHandler.DeleteDocument)
+			ragGroup.POST("/query", ragHandler.Query)
+		}
+
+		// 旧的兼容API
+		aiHandler.RegisterRoutes(base)
+	} else {
+		// 退回到模拟实现
+		aiHandler := handler.NewAIMockHandler()
+		aiHandler.RegisterRoutes(base)
+	}
 
 	// 认证API不需要JWT验证
 	authGroup := base.Group("/auth")

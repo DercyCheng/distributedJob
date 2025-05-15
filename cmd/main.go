@@ -122,12 +122,25 @@ func main() {
 	taskService := service.NewTaskService(repoManager.Task(), scheduler)
 	taskService.SetTracer(infra.Tracer)
 	taskService.SetMetrics(infra.Metrics)
+
+	// 初始化AI服务（如果AI功能已启用）
+	var aiService *service.AIService
+	if cfg.AI != nil && cfg.AI.Enabled {
+		aiService = service.NewAIService(cfg.AI)
+		if err := aiService.Initialize(ctx); err != nil {
+			logger.Warn("Failed to initialize AI service", "error", err)
+		} else {
+			logger.Info("AI service initialized successfully")
+		}
+	}
+
 	// 启动调度器
 	if err := scheduler.Start(); err != nil {
 		logger.Fatal("Failed to start scheduler", "error", err)
 	}
+
 	// 创建API服务器
-	apiServer := api.NewServer(cfg, scheduler, repoManager, authService, tokenRevoker, infra)
+	apiServer := api.NewServer(cfg, scheduler, repoManager, authService, aiService, tokenRevoker, infra)
 
 	// 创建RPC服务器
 	rpcServer := server.NewRPCServer(cfg, scheduler, taskService, authService)
