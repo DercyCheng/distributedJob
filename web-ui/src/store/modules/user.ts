@@ -22,24 +22,31 @@ export const useUserStore = defineStore('user', {
       permissions: []
     }
   }),
-  
+
   getters: {
     isLoggedIn: (state) => !!state.token,
     hasPermission: (state) => (permission: string) => {
       return state.userInfo.permissions.includes(permission)
     }
   },
-  
-  actions: {
-    // 登录
+
+  actions: {    // 登录
     async login(username: string, password: string) {
       try {
+        console.log('Attempting login for user:', username);
         const data = await login({ username, password })
+        console.log('Login response data:', data);
+
         // 后端返回 accessToken，而不是 token
         const accessToken = data.accessToken || data.token || ''
+        if (!accessToken) {
+          console.error('No token returned from server');
+          throw new Error('服务器返回的令牌无效，请联系管理员');
+        }
+
         this.token = accessToken
         setToken(accessToken)
-        
+
         // 获取用户信息
         const userId = data.userId ?? 0
         const userName = data.username ?? ''
@@ -59,14 +66,25 @@ export const useUserStore = defineStore('user', {
           // If user info is not included in login response, fetch it separately
           await this.fetchUserInfo()
         }
-        
+
         return data
-      } catch (error) {
-        console.error('Login failed:', error)
-        throw error
+      } catch (error: any) {
+        console.error('Login failed details:', {
+          message: error.message,
+          response: error.response ? {
+            status: error.response.status,
+            data: error.response.data
+          } : 'No response',
+          request: !!error.request
+        });
+
+        if (error.response && error.response.data && error.response.data.message) {
+          throw new Error(error.response.data.message);
+        }
+        throw error;
       }
     },
-    
+
     // 获取用户信息
     async fetchUserInfo() {
       try {
@@ -92,7 +110,7 @@ export const useUserStore = defineStore('user', {
         throw error
       }
     },
-    
+
     // 刷新令牌
     async refreshToken() {
       try {
@@ -100,23 +118,23 @@ export const useUserStore = defineStore('user', {
         if (!currentToken) {
           throw new Error('No token to refresh')
         }
-        
+
         const response = await apiRefreshToken()
         const newToken = response.accessToken || response.token || ''
-        
+
         if (newToken) {
           this.token = newToken
           setToken(newToken)
           return true
         }
-        
+
         return false
       } catch (error) {
         console.error('Failed to refresh token:', error)
         throw error
       }
     },
-    
+
     // 登出
     logout() {
       this.token = ''

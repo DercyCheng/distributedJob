@@ -90,11 +90,26 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true;
       try {
-        await userStore.login(loginForm.username, loginForm.password);
+        const result = await userStore.login(loginForm.username, loginForm.password);
+        console.log("Login result:", result); // 调试信息
         ElMessage.success("登录成功");
         router.push({ path: "/" });
       } catch (error: any) {
-        ElMessage.error(error.message || "登录失败，请检查用户名和密码");
+        console.error("Login error:", error); // 添加详细错误日志
+        
+        if (error.response && error.response.status === 401) {
+          // 具体处理401未授权错误
+          const data = error.response.data;
+          if (data && data.message) {
+            ElMessage.error(data.message);
+          } else {
+            ElMessage.error("用户名或密码错误");
+          }
+        } else if (error.message) {
+          ElMessage.error(error.message);
+        } else {
+          ElMessage.error("登录失败，请检查用户名和密码");
+        }
       } finally {
         loading.value = false;
       }

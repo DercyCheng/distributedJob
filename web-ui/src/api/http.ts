@@ -30,14 +30,14 @@ const http = axios.create({
 // Request interceptor
 http.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
-    // 检查是否需要刷新令牌（非刷新令牌的请求）
-    if (config.url !== '/auth/refresh' && !isRefreshing) {
+    // 登录请求和刷新令牌请求不需要尝试刷新令牌
+    if (config.url !== '/auth/login' && config.url !== '/auth/refresh' && !isRefreshing) {
       try {
         // 尝试刷新令牌
         isRefreshing = true
         const refreshed = await autoRefreshToken()
         isRefreshing = false
-        
+
         if (refreshed) {
           // 如果刷新成功，通知所有等待的请求继续执行
           onTokenRefreshed(getToken())
@@ -47,13 +47,15 @@ http.interceptors.request.use(
         console.error('Token refresh failed:', error)
       }
     }
-    
-    // 添加令牌到请求头
-    const token = getToken()
-    if (token && config.headers) {
-      config.headers['Authorization'] = `Bearer ${token}`
+
+    // 添加令牌到请求头 - 登录请求不需要添加令牌
+    if (config.url !== '/auth/login') {
+      const token = getToken()
+      if (token && config.headers) {
+        config.headers['Authorization'] = `Bearer ${token}`
+      }
     }
-    
+
     return config
   },
   (error: AxiosError) => {
@@ -74,30 +76,30 @@ http.interceptors.response.use(
   async (error: AxiosError) => {
     if (error.response) {
       const { status, data, config } = error.response as AxiosResponse
-      
+
       // 特殊处理401错误（令牌无效或过期）
       if (status === 401) {
         // 如果不是刷新令牌的请求，且当前没有正在刷新令牌，尝试刷新令牌
         if (config.url !== '/auth/refresh' && !isRefreshing) {
           isRefreshing = true
-          
+
           try {
             // 尝试刷新令牌
             const refreshed = await autoRefreshToken()
             isRefreshing = false
-            
+
             if (refreshed) {
               // 令牌刷新成功，重试原始请求
               const newToken = getToken()
-              
+
               // 通知所有等待的请求继续执行
               onTokenRefreshed(newToken)
-              
+
               // 更新当前请求的令牌
               if (config.headers) {
                 config.headers['Authorization'] = `Bearer ${newToken}`
               }
-              
+
               // 重试原始请求
               return http(config)
             } else {
@@ -124,7 +126,7 @@ http.interceptors.response.use(
           })
         }
       }
-      
+
       // Handle different status codes (for other status codes)
       switch (status) {
         case 400:

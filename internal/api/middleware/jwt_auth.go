@@ -57,9 +57,22 @@ func JWTAuth(cfg *config.Config, tokenRevoker store.TokenRevoker) gin.HandlerFun
 		// 解析token
 		claims, err := ParseAccessToken(parts[1], cfg.Auth.JwtSecret, tokenRevoker)
 		if err != nil {
+			// 添加详细错误日志，帮助诊断问题
+			fmt.Printf("JWT验证失败: %v, token: %s\n", err, parts[1][:10]+"...")
+
+			// 返回更友好的错误消息
+			errorMsg := "身份验证失败"
+			if strings.Contains(err.Error(), "expired") {
+				errorMsg = "登录已过期，请重新登录"
+			} else if strings.Contains(err.Error(), "signature") {
+				errorMsg = "无效的身份凭证"
+			} else if strings.Contains(err.Error(), "revoked") {
+				errorMsg = "登录凭证已被撤销，请重新登录"
+			}
+
 			c.JSON(401, gin.H{
 				"code":    4001,
-				"message": err.Error(),
+				"message": errorMsg,
 			})
 			c.Abort()
 			return
