@@ -55,7 +55,7 @@ const router = useRouter();
 const userStore = useUserStore();
 const loginForm = reactive({
   username: "admin", // 默认用户名
-  password: "12345678", // 默认密码改为与数据库一致
+  password: "admin123", // 默认密码与数据库一致
 });
 
 const loginRules = {
