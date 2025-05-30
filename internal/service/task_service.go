@@ -27,14 +27,6 @@ const (
 	TaskStatusDisabled int8 = 2
 )
 
-// TaskStatistics 任务统计信息
-type TaskStatistics struct {
-	TaskCount        int                // 任务总数
-	SuccessRate      float64            // 任务成功率
-	AvgExecutionTime float64            // 平均执行时间(毫秒)
-	ExecutionStats   map[string]float64 // 执行统计，可包含不同类型任务的统计数据
-}
-
 // TaskService 任务服务接口
 type TaskService interface {
 	// 设置可观测性组件
@@ -59,7 +51,7 @@ type TaskService interface {
 
 	// 为RPC服务添加的方法
 	GetTaskRecords(taskID int64, startTime, endTime time.Time, limit, offset int) ([]*entity.Record, int64, error)
-	GetTaskStatistics(departmentID int64, startTime, endTime time.Time) (*TaskStatistics, error)
+	GetTaskStatistics(departmentID int64, startTime, endTime time.Time) (*entity.TaskStatistics, error)
 }
 
 // taskService 任务服务实现
@@ -398,13 +390,13 @@ func (s *taskService) GetTaskRecords(taskID int64, startTime, endTime time.Time,
 }
 
 // GetTaskStatistics gets task statistics for the specified time range and department
-func (s *taskService) GetTaskStatistics(departmentID int64, startTime, endTime time.Time) (*TaskStatistics, error) {
+func (s *taskService) GetTaskStatistics(departmentID int64, startTime, endTime time.Time) (*entity.TaskStatistics, error) {
 	// Determine the year and month for partitioning
 	currentYear := time.Now().Year()
 	currentMonth := int(time.Now().Month())
 
 	// Initialize statistics
-	stats := &TaskStatistics{
+	stats := &entity.TaskStatistics{
 		TaskCount:        0,
 		SuccessRate:      0,
 		AvgExecutionTime: 0,
