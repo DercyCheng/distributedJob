@@ -199,11 +199,11 @@ func (s *Server) setupRoutes() {
 
 	// 服务关闭API仅限本地访问
 	base.GET("/shutdown", s.localOnly(), s.shutdown)
-
 	// 认证API不需要JWT验证
 	authGroup := base.Group("/auth")
 	{
 		authGroup.POST("/login", s.login)
+		authGroup.POST("/register", s.register) // 添加注册接口
 		// 使用专门的刷新令牌中间件
 		authGroup.POST("/refresh", middleware.RefreshAuth(s.config, s.tokenRevoker), s.refreshToken)
 		authGroup.POST("/logout", s.logout)
@@ -404,6 +404,192 @@ func (s *Server) login(c *gin.Context) {
 	c.JSON(http.StatusOK, ResponseBody{
 		Code:      ErrorCodes.Success,
 		Message:   "登录成功",
+		RequestId: c.GetString("requestId"),
+		Data: map[string]interface{}{
+			"accessToken":  accessToken,
+			"refreshToken": refreshToken,
+			"userId":       user.ID,
+			"username":     user.Username,
+			"realName":     user.RealName,
+			"departmentId": user.DepartmentID,
+			"roleId":       user.RoleID,
+			"tokenType":    "Bearer",
+			"expiresIn":    s.config.Auth.JwtExpireMinutes * 60, // 过期时间(秒)
+		},
+	})
+}
+
+// 用户注册API
+func (s *Server) register(c *gin.Context) {
+	// 解析请求参数
+	var req struct {
+		Username     string `json:"username" binding:"required"`
+		Password     string `json:"password" binding:"required"`
+		Name         string `json:"name" binding:"required"`
+		Email        string `json:"email" binding:"required,email"`
+		DepartmentID int64  `json:"departmentId" binding:"required"`
+		RoleID       int64  `json:"roleId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// 详细解析验证错误信息
+		validationErrors := []map[string]string{}
+
+		if strings.Contains(err.Error(), "username") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "username",
+				"error": "用户名不能为空",
+			})
+		}
+
+		if strings.Contains(err.Error(), "password") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "password",
+				"error": "密码不能为空",
+			})
+		}
+
+		if strings.Contains(err.Error(), "name") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "name",
+				"error": "姓名不能为空",
+			})
+		}
+
+		if strings.Contains(err.Error(), "email") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "email",
+				"error": "邮箱格式不正确",
+			})
+		}
+
+		if strings.Contains(err.Error(), "departmentId") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "departmentId",
+				"error": "必须选择部门",
+			})
+		}
+
+		if strings.Contains(err.Error(), "roleId") {
+			validationErrors = append(validationErrors, map[string]string{
+				"field": "roleId",
+				"error": "必须选择角色",
+			})
+		}
+
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:      ErrorCodes.ValidationFailed,
+			Message:   "请求参数验证失败",
+			Data:      validationErrors,
+			ErrorType: ErrorDetails.ValidationError,
+			RequestId: c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 参数额外验证
+	if len(req.Username) < 4 {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "用户名长度不能少于4个字符",
+			ErrorField: "username",
+			ErrorType:  ErrorDetails.FieldTooShort,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	if len(req.Password) < 8 {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "密码长度不能少于8个字符",
+			ErrorField: "password",
+			ErrorType:  ErrorDetails.FieldTooShort,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	if len(req.Name) < 2 {
+		c.JSON(http.StatusBadRequest, ResponseBody{
+			Code:       ErrorCodes.ValidationFailed,
+			Message:    "姓名长度不能少于2个字符",
+			ErrorField: "name",
+			ErrorType:  ErrorDetails.FieldTooShort,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 创建用户对象
+	user := &entity.User{
+		Username:     req.Username,
+		Password:     req.Password,
+		RealName:     req.Name,
+		Email:        req.Email,
+		DepartmentID: req.DepartmentID,
+		RoleID:       req.RoleID,
+		Status:       1, // 默认启用
+	}
+
+	// 调用用户服务创建用户
+	id, err := s.authService.CreateUser(user)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := ErrorCodes.InternalServerError
+		errorType := ErrorDetails.SystemError
+		errorField := ""
+
+		// 根据错误类型设置不同的状态码
+		if err.Error() == "username already exists" {
+			status = http.StatusBadRequest
+			code = ErrorCodes.ResourceAlreadyExists
+			errorType = ErrorDetails.ResourceAlreadyExists
+			errorField = "username"
+		} else if strings.Contains(err.Error(), "department not found") {
+			status = http.StatusBadRequest
+			code = ErrorCodes.ValidationFailed
+			errorType = ErrorDetails.ResourceNotFound
+			errorField = "departmentId"
+		} else if strings.Contains(err.Error(), "role not found") {
+			status = http.StatusBadRequest
+			code = ErrorCodes.ValidationFailed
+			errorType = ErrorDetails.ResourceNotFound
+			errorField = "roleId"
+		}
+
+		c.JSON(status, ResponseBody{
+			Code:       code,
+			Message:    err.Error(),
+			ErrorType:  errorType,
+			ErrorField: errorField,
+			Data:       nil,
+			RequestId:  c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 获取创建的用户信息
+	user.ID = id
+	user.Password = "" // 清除密码
+
+	// 生成访问令牌和刷新令牌
+	accessToken, refreshToken, err := s.authService.GenerateTokens(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ResponseBody{
+			Code:      ErrorCodes.InternalServerError,
+			Message:   "生成令牌失败: " + err.Error(),
+			Data:      nil,
+			ErrorType: ErrorDetails.SystemError,
+			RequestId: c.GetString("requestId"),
+		})
+		return
+	}
+
+	// 返回注册成功的信息
+	c.JSON(http.StatusOK, ResponseBody{
+		Code:      ErrorCodes.Success,
+		Message:   "注册成功",
 		RequestId: c.GetString("requestId"),
 		Data: map[string]interface{}{
 			"accessToken":  accessToken,

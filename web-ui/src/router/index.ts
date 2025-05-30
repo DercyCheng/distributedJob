@@ -8,8 +8,17 @@ const router = createRouter({
       path: '/login',
       name: 'Login',
       component: () => import('@/views/auth/Login.vue'),
-      meta: { 
+      meta: {
         title: '登录',
+        hidden: true
+      }
+    },
+    {
+      path: '/register',
+      name: 'Register',
+      component: () => import('@/views/auth/Register.vue'),
+      meta: {
+        title: '注册',
         hidden: true
       }
     },
@@ -17,7 +26,7 @@ const router = createRouter({
       path: '/404',
       name: 'NotFound',
       component: () => import('@/views/auth/NotFound.vue'),
-      meta: { 
+      meta: {
         title: '404',
         hidden: true
       }
@@ -180,10 +189,10 @@ router.beforeEach((to, _, next) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} - DistributedJob`
   }
-
   // Check if needs auth
   const token = localStorage.getItem('token')
-  if (to.path === '/login') {
+  // 登录和注册页面不需要认证
+  if (to.path === '/login' || to.path === '/register') {
     if (token) {
       next({ path: '/' })
     } else {

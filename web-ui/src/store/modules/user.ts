@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { login, getUserInfo, refreshToken as apiRefreshToken, UserInfo } from '@/api/auth'
+import { login, register, getUserInfo, refreshToken as apiRefreshToken, UserInfo } from '@/api/auth'
 import { setToken, getToken, removeToken } from '@/utils/token'
 
 interface UserState {
@@ -70,6 +70,53 @@ export const useUserStore = defineStore('user', {
         return data
       } catch (error: any) {
         console.error('Login failed details:', {
+          message: error.message,
+          response: error.response ? {
+            status: error.response.status,
+            data: error.response.data
+          } : 'No response',
+          request: !!error.request
+        });
+
+        if (error.response && error.response.data && error.response.data.message) {
+          throw new Error(error.response.data.message);
+        }
+        throw error;
+      }
+    },
+
+    // 注册
+    async register(userData: {
+      username: string;
+      password: string;
+      name: string;
+      email: string;
+      departmentId: number;
+      roleId: number;
+    }) {
+      try {
+        console.log('Attempting registration for user:', userData.username);
+        const data = await register(userData);
+        console.log('Register response data:', data);
+
+        // 如果注册成功并返回了令牌，则自动登录
+        if (data && data.accessToken) {
+          const accessToken = data.accessToken || data.token || '';
+          if (!accessToken) {
+            console.error('No token returned from server');
+            throw new Error('服务器返回的令牌无效，请联系管理员');
+          }
+
+          this.token = accessToken;
+          setToken(accessToken);
+
+          // 获取用户信息
+          await this.fetchUserInfo();
+        }
+
+        return data;
+      } catch (error: any) {
+        console.error('Registration failed details:', {
           message: error.message,
           response: error.response ? {
             status: error.response.status,

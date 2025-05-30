@@ -5,6 +5,15 @@ interface LoginParams {
   password: string
 }
 
+interface RegisterParams {
+  username: string
+  password: string
+  name: string
+  email: string
+  departmentId: number
+  roleId: number
+}
+
 interface LoginResult {
   accessToken?: string  // 后端返回的是accessToken，不是token
   refreshToken?: string
@@ -38,6 +47,10 @@ interface RefreshTokenResult {
 
 export function login(data: LoginParams) {
   return http.post<any, LoginResult>('/auth/login', data)
+}
+
+export function register(data: RegisterParams) {
+  return http.post<any, LoginResult>('/auth/register', data)
 }
 
 export function logout() {
