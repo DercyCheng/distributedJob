@@ -130,7 +130,11 @@ func main() {
 	apiServer := api.NewServer(cfg, scheduler, repoManager, authService, tokenRevoker, infra)
 
 	// 创建RPC服务器
-	rpcServer := server.NewRPCServer(cfg, scheduler, taskService, authService)
+	// Create ModelContextService
+	modelContextService := service.NewModelContextService()
+
+	// Create RPC server with MCP service
+	rpcServer := server.NewRPCServer(cfg, scheduler, taskService, authService, modelContextService)
 
 	// 启动RPC服务器（异步）
 	rpcServer.StartAsync()

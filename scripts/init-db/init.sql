@@ -161,14 +161,14 @@ VALUES
 -- 用户数据 (admin123)
 INSERT INTO user (id, username, password, real_name, email, phone, department_id, role_id, status) 
 VALUES 
-(1, 'admin', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '系统管理员', 'admin@example.com', '13800000000', 1, 1, 1),
-(2, 'dev1', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '开发者1', 'dev1@example.com', '13800000001', 7, 2, 1),
-(3, 'dev2', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '开发者2', 'dev2@example.com', '13800000002', 6, 2, 1),
-(4, 'ops1', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '运维1', 'ops1@example.com', '13800000003', 3, 3, 1),
-(5, 'ops2', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '运维2', 'ops2@example.com', '13800000004', 9, 3, 1),
-(6, 'test1', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '测试1', 'test1@example.com', '13800000005', 4, 4, 1),
-(7, 'manager1', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '研发主管', 'manager1@example.com', '13800000006', 2, 5, 1),
-(8, 'manager2', '$2a$10$3sH5bRh9RqbMP3JhFJykZehvfcCCkOAiJPSLlKgvmfLECIWkzLjhK', '运维主管', 'manager2@example.com', '13800000007', 3, 5, 1);
+(1, 'admin', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '系统管理员', 'admin@example.com', '13800000000', 1, 1, 1),
+(2, 'dev1', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '开发者1', 'dev1@example.com', '13800000001', 7, 2, 1),
+(3, 'dev2', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '开发者2', 'dev2@example.com', '13800000002', 6, 2, 1),
+(4, 'ops1', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '运维1', 'ops1@example.com', '13800000003', 3, 3, 1),
+(5, 'ops2', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '运维2', 'ops2@example.com', '13800000004', 9, 3, 1),
+(6, 'test1', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '测试1', 'test1@example.com', '13800000005', 4, 4, 1),
+(7, 'manager1', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '研发主管', 'manager1@example.com', '13800000006', 2, 5, 1),
+(8, 'manager2', '$2a$10$Pe.qJQONn5mJqGa5j3B1tub/IkREfoxDS0A85wcnY8kTWw6PIg7iO', '运维主管', 'manager2@example.com', '13800000007', 3, 5, 1);
 
 -- 任务数据
 INSERT INTO task (id, name, description, cron_expression, handler, params, status, max_retry, creator_id, next_execute_time) 

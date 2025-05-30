@@ -20,11 +20,12 @@ import (
 
 // RPCServer represents the gRPC server
 type RPCServer struct {
-	config      *config.Config
-	server      *grpc.Server
-	taskService service.TaskService
-	authService service.AuthService
-	scheduler   *job.Scheduler
+	config              *config.Config
+	server              *grpc.Server
+	taskService         service.TaskService
+	authService         service.AuthService
+	modelContextService service.ModelContextService
+	scheduler           *job.Scheduler
 }
 
 // NewRPCServer creates a new RPCServer instance
@@ -33,6 +34,7 @@ func NewRPCServer(
 	scheduler *job.Scheduler,
 	taskService service.TaskService,
 	authService service.AuthService,
+	modelContextService service.ModelContextService,
 ) *RPCServer {
 	// Configure keep-alive parameters
 	kaParams := keepalive.ServerParameters{
@@ -51,11 +53,12 @@ func NewRPCServer(
 	)
 
 	return &RPCServer{
-		config:      config,
-		server:      grpcServer,
-		taskService: taskService,
-		authService: authService,
-		scheduler:   scheduler,
+		config:              config,
+		server:              grpcServer,
+		taskService:         taskService,
+		authService:         authService,
+		modelContextService: modelContextService,
+		scheduler:           scheduler,
 	}
 }
 
@@ -116,7 +119,11 @@ func (s *RPCServer) registerServices() {
 	dataServiceServer := NewDataServiceServer(s.taskService)
 	pb.RegisterDataServiceServer(s.server, dataServiceServer)
 
-	logger.Info("Registered all RPC services")
+	// Register the Model Context (MCP) service
+	mcpServer := NewModelContextServiceServer(s.modelContextService)
+	pb.RegisterModelContextServiceServer(s.server, mcpServer)
+
+	logger.Info("Registered all RPC services including MCP service")
 }
 
 // GetClientConnection returns a gRPC client connection to this server

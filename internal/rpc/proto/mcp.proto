@@ -1,0 +1,20 @@
+syntax = "proto3";
+package rpc.protopb;
+
+option go_package = "distributedJob/internal/rpc/proto";
+
+// Model Context Protocol (MCP) service definition
+service ModelContextService {
+  // GetModelContext retrieves the runtime context for a given model
+  rpc GetModelContext(ModelContextRequest) returns (ModelContextResponse) {};
+}
+
+// ModelContextRequest is the request message for GetModelContext
+message ModelContextRequest {
+  string model_id = 1; // ID of the model
+}
+
+// ModelContextResponse is the response message for GetModelContext
+message ModelContextResponse {
+  string context = 1; // Serialized context of the model
+}

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"distributedJob/internal/model/entity"
+
 	"gorm.io/gorm"
 )
 
@@ -28,9 +29,15 @@ func (r *UserRepository) GetUserByID(id int64) (*entity.User, error) {
 // GetUserByUsername 根据用户名获取用户
 func (r *UserRepository) GetUserByUsername(username string) (*entity.User, error) {
 	var user entity.User
-	result := r.db.Where("username = ?", username).First(&user)
+	// Use raw SQL to select by username without ORDER BY, leveraging username index
+	sql := "SELECT id, username, password, real_name, email, phone, department_id, role_id, status, create_time, update_time " +
+		"FROM `user` WHERE username = ? LIMIT 1"
+	result := r.db.Raw(sql, username).Scan(&user)
 	if result.Error != nil {
 		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &user, nil
 }

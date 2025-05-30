@@ -1967,6 +1967,15 @@ func (s *Server) getPermissionList(c *gin.Context) {
 	})
 }
 
+// CreateLoginTestRouter returns a Gin engine with only the login handler set up for testing.
+func CreateLoginTestRouter(cfg *config.Config, authService service.AuthService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	s := &Server{config: cfg, router: r, authService: authService}
+	r.POST("/login", s.login)
+	return r
+}
+
 // localOnly 只允许本地访问的中间件
 func (s *Server) localOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
