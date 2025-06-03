@@ -1,10 +1,9 @@
-
 <div align="center">
   <h1>DistributedJob</h1>
   <h3>高性能分布式任务调度系统</h3>
 </div>
 
-![Go Version](https://img.shields.io/badge/go-1.23+-blue.svg)
+![Go Version](https://img.shields.io/badge/go-1.24+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ## 项目简介
@@ -47,9 +46,9 @@ DistributedJob 采用现代化的微服务架构，主要由以下组件构成:
 
 ### 系统要求
 
-- Go 1.23+
+- Go 1.24+
 - Docker & Docker Compose
-- Node.js 14+
+- Node.js 16+
 
 ### 使用 Docker Compose 启动
 
@@ -77,7 +76,7 @@ DistributedJob 采用现代化的微服务架构，主要由以下组件构成:
 3. 访问服务
 
    - API服务: http://localhost:8080/v1
-   - Web界面: http://localhost:8080
+   - Web界面: http://localhost:5173
    - Grafana: http://localhost:3000
    - Jaeger UI: http://localhost:16686
    - Kibana: http://localhost:5601
@@ -88,13 +87,13 @@ DistributedJob 采用现代化的微服务架构，主要由以下组件构成:
 2. 编译服务
 
    ```bash
-   go build -o distributedJob ./cmd
+   go build -o distributedJob ./cmd/main.go
    ```
 3. 配置服务
 
    ```bash
-   cp configs/config.yaml.example configs/config.yaml
    # 编辑配置文件以适应你的环境
+   vim configs/config.yaml
    ```
 4. 初始化数据库
 
@@ -114,6 +113,7 @@ DistributedJob 采用现代化的微服务架构，主要由以下组件构成:
    npm run build
    # 将生成的 dist 目录部署到 web 服务器
    ```
+7. 更多使用说明请参见 `docs/build.md`
 
 ## 配置说明
 
@@ -140,7 +140,7 @@ redis:
 # 更多配置项...
 ```
 
-## API 
+## API
 
 系统提供完整的 RESTful API:
 
@@ -158,6 +158,31 @@ redis:
 1. 代码风格符合项目规范
 2. 提供完整的单元测试和集成测试
 3. 必要时更新文档
+
+## 开发与测试
+
+### 后端开发
+```bash
+# 启动后端服务
+go run ./cmd/main.go
+
+# 运行单元测试
+go test ./...
+```
+
+### 前端开发
+```bash
+cd web-ui
+npm install
+npm run dev
+# 前端开发服务器将在 http://localhost:5173 启动
+# API请求会自动代理到后端服务 http://localhost:8080
+```
+
+### 端口说明
+- 后端API服务: http://localhost:8080/v1
+- 前端开发服务器: http://localhost:5173
+- 后端RPC服务: localhost:8081
 
 ## 许可证
 

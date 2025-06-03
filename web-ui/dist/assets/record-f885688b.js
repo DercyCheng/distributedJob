@@ -1,0 +1,1 @@
+import{C as r}from"./index-462fafd6.js";function e(e){return r.get("/records",{params:e})}function o(e){return r.get(`/records/${e}`)}function s(e){return r.get("/records/export",{params:e,responseType:"blob"})}export{o as a,s as e,e as g};
