@@ -1,1 +1,0 @@
-import{C as r}from"./index-462fafd6.js";function e(e){return r.get("/roles",{params:e})}function t(e){return r.get(`/roles/${e}`)}function n(e){return r.post("/roles",e)}function s(e,t){return r.put(`/roles/${e}`,t)}function o(e){return r.delete(`/roles/${e}`)}function u(){return r.get("/permissions/tree")}export{u as a,t as b,n as c,o as d,e as g,s as u};
