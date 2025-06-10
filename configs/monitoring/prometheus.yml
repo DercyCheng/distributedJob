@@ -1,0 +1,44 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus 自监控
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Go Job 应用监控
+  - job_name: "go-job"
+    static_configs:
+      - targets: ["go-job:8080"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  # MySQL 监控（需要 mysqld_exporter）
+  - job_name: "mysql"
+    static_configs:
+      - targets: ["mysql-exporter:9104"]
+    scrape_interval: 10s
+
+  # Redis 监控（需要 redis_exporter）
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+    scrape_interval: 10s
+
+  # Node 监控（需要 node_exporter）
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+    scrape_interval: 10s
+
+  # Nginx 监控（需要 nginx-prometheus-exporter）
+  - job_name: "nginx"
+    static_configs:
+      - targets: ["nginx-exporter:9113"]
+    scrape_interval: 10s

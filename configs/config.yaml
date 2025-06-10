@@ -1,0 +1,57 @@
+# 服务器配置
+server:
+  http:
+    host: "0.0.0.0"
+    port: "8080"
+  grpc:
+    host: "0.0.0.0"
+    port: "9090"
+
+# 数据库配置
+database:
+  mysql:
+    host: "mysql"
+    port: 3306
+    username: "root"
+    password: "password"
+    database: "go_job"
+    charset: "utf8mb4"
+    parseTime: true
+    loc: "Local"
+    maxIdleConns: 10
+    maxOpenConns: 100
+    connMaxLifetime: 300s
+
+# Redis配置
+redis:
+  host: "redis"
+  port: 6379
+  password: ""
+  db: 0
+  poolSize: 10
+  minIdleConns: 2
+
+# 调度器配置
+scheduler:
+  timezone: "Asia/Shanghai"
+  maxWorkers: 100
+  retryAttempts: 3
+  heartbeatInterval: 30
+  # AI调度配置
+  ai:
+    enabled: true
+    dashscopeApiKey: "sk-nlorxhdzgcgskdexntrhkleffwdwbwecsuvunqxkpdrclyjo"
+    model: "qwen-max"
+    temperature: 0.7
+    maxTokens: 2000
+
+# 日志配置
+logger:
+  level: "info"
+  output: "stdout"
+  format: "json"
+
+# JWT配置
+jwt:
+  secret: "your-jwt-secret-key-change-in-production"
+  expire: "24h"

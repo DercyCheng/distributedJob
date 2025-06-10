@@ -1,0 +1,284 @@
+<template>
+  <div class="workers">
+    <div class="page-header">
+      <h1>工作节点</h1>
+    </div>
+
+    <!-- 搜索筛选 -->
+    <el-card class="search-card">
+      <el-form :model="searchForm" inline>
+        <el-form-item label="状态">
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
+            <el-option label="全部" value="" />
+            <el-option label="在线" value="online" />
+            <el-option label="离线" value="offline" />
+            <el-option label="忙碌" value="busy" />
+            <el-option label="维护中" value="maintenance" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="loadWorkers">搜索</el-button>
+          <el-button @click="resetSearch">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 工作节点列表 -->
+    <el-card>
+      <el-table :data="workers" stripe v-loading="loading">
+        <el-table-column prop="name" label="节点名称" />
+        <el-table-column prop="ip" label="IP地址" />
+        <el-table-column prop="port" label="端口" />
+        <el-table-column prop="status" label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)">
+              {{ getStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="负载" width="200">
+          <template #default="{ row }">
+            <div class="load-info">
+              <el-progress
+                :percentage="getLoadPercentage(row)"
+                :color="getLoadColor(row)"
+                :stroke-width="12"
+              />
+              <span class="load-text">{{ row.current_load }}/{{ row.capacity }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="last_heartbeat" label="最后心跳" width="180">
+          <template #default="{ row }">
+            {{ row.last_heartbeat ? formatTime(row.last_heartbeat) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="注册时间" width="180">
+          <template #default="{ row }">
+            {{ formatTime(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" @click="viewWorker(row)">
+              查看详情
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="loadWorkers"
+          @current-change="loadWorkers"
+        />
+      </div>
+    </el-card>
+
+    <!-- 工作节点详情对话框 -->
+    <el-dialog
+      v-model="showDetailDialog"
+      title="工作节点详情"
+      width="600px"
+    >
+      <div v-if="currentWorker">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="节点ID">
+            {{ currentWorker.id }}
+          </el-descriptions-item>
+          <el-descriptions-item label="节点名称">
+            {{ currentWorker.name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="IP地址">
+            {{ currentWorker.ip }}
+          </el-descriptions-item>
+          <el-descriptions-item label="端口">
+            {{ currentWorker.port }}
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="getStatusType(currentWorker.status)">
+              {{ getStatusText(currentWorker.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="容量">
+            {{ currentWorker.capacity }}
+          </el-descriptions-item>
+          <el-descriptions-item label="当前负载">
+            {{ currentWorker.current_load }}
+          </el-descriptions-item>
+          <el-descriptions-item label="负载率">
+            {{ getLoadPercentage(currentWorker) }}%
+          </el-descriptions-item>
+          <el-descriptions-item label="最后心跳">
+            {{ currentWorker.last_heartbeat ? formatTime(currentWorker.last_heartbeat) : '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="注册时间">
+            {{ formatTime(currentWorker.created_at) }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <div v-if="currentWorker.metadata" class="metadata-section">
+          <h3>节点元数据</h3>
+          <el-table :data="getMetadataList(currentWorker.metadata)" size="small">
+            <el-table-column prop="key" label="键" />
+            <el-table-column prop="value" label="值" />
+          </el-table>
+        </div>
+      </div>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { getWorkers, getWorker } from '@/api/workers'
+
+const workers = ref([])
+const loading = ref(false)
+const showDetailDialog = ref(false)
+const currentWorker = ref(null)
+
+const searchForm = reactive({
+  status: ''
+})
+
+const pagination = reactive({
+  page: 1,
+  size: 10,
+  total: 0
+})
+
+onMounted(() => {
+  loadWorkers()
+})
+
+const loadWorkers = async () => {
+  loading.value = true
+  try {
+    const params = {
+      page: pagination.page,
+      size: pagination.size,
+      status: searchForm.status
+    }
+    const response = await getWorkers(params)
+    workers.value = response.data.workers || []
+    pagination.total = response.data.total || 0
+  } catch (error) {
+    ElMessage.error('加载工作节点失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const resetSearch = () => {
+  searchForm.status = ''
+  pagination.page = 1
+  loadWorkers()
+}
+
+const viewWorker = async (worker) => {
+  try {
+    const response = await getWorker(worker.id)
+    currentWorker.value = response.data
+    showDetailDialog.value = true
+  } catch (error) {
+    ElMessage.error('加载工作节点详情失败')
+  }
+}
+
+const getStatusType = (status) => {
+  const typeMap = {
+    'online': 'success',
+    'offline': 'danger',
+    'busy': 'warning',
+    'maintenance': 'info'
+  }
+  return typeMap[status] || 'info'
+}
+
+const getStatusText = (status) => {
+  const textMap = {
+    'online': '在线',
+    'offline': '离线',
+    'busy': '忙碌',
+    'maintenance': '维护中'
+  }
+  return textMap[status] || status
+}
+
+const getLoadPercentage = (worker) => {
+  if (!worker.capacity) return 0
+  return Math.round((worker.current_load / worker.capacity) * 100)
+}
+
+const getLoadColor = (worker) => {
+  const percentage = getLoadPercentage(worker)
+  if (percentage >= 90) return '#F56C6C'
+  if (percentage >= 70) return '#E6A23C'
+  return '#67C23A'
+}
+
+const formatTime = (time) => {
+  return new Date(time).toLocaleString()
+}
+
+const getMetadataList = (metadata) => {
+  if (!metadata) return []
+  try {
+    const parsed = typeof metadata === 'string' ? JSON.parse(metadata) : metadata
+    return Object.entries(parsed).map(([key, value]) => ({ key, value }))
+  } catch {
+    return []
+  }
+}
+</script>
+
+<style scoped>
+.workers {
+  padding: 20px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.search-card {
+  margin-bottom: 20px;
+}
+
+.pagination {
+  margin-top: 20px;
+  text-align: right;
+}
+
+.load-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.load-text {
+  font-size: 12px;
+  color: #666;
+  min-width: 50px;
+}
+
+.metadata-section {
+  margin-top: 20px;
+}
+
+.metadata-section h3 {
+  margin-bottom: 10px;
+  color: #333;
+}
+</style>
