@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"go-job/internal/models"
 	"go-job/pkg/database"
@@ -88,5 +89,38 @@ func (h *ExecutionHandler) GetExecution(c *gin.Context) {
 
 // CancelExecution 取消执行记录
 func (h *ExecutionHandler) CancelExecution(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "CancelExecution - to be implemented"})
+	id := c.Param("id")
+
+	var execution models.JobExecution
+	if err := h.db.First(&execution, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "执行记录不存在"})
+			return
+		}
+		logger.WithError(err).Error("查询执行记录失败")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 检查是否可以取消
+	if execution.Status != models.ExecutionStatusPending && execution.Status != models.ExecutionStatusRunning {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能取消等待中或运行中的任务"})
+		return
+	}
+
+	// 更新状态为已取消
+	if err := h.db.Model(&execution).Updates(map[string]interface{}{
+		"status":      models.ExecutionStatusCancelled,
+		"finished_at": time.Now(),
+		"error":       "用户取消执行",
+	}).Error; err != nil {
+		logger.WithError(err).Error("取消执行记录失败")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "执行记录已取消",
+		"data":    gin.H{"id": id, "status": "cancelled"},
+	})
 }

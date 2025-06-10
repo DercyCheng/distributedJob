@@ -292,3 +292,62 @@ func (s *UserService) modelToGrpcUser(user *models.User) *grpc.User {
 
 	return grpcUser
 }
+
+func (s *UserService) AssignUserRoles(ctx context.Context, req *grpc.AssignUserRolesRequest) (*grpc.AssignUserRolesResponse, error) {
+	// 查找用户
+	var user models.User
+	err := s.db.First(&user, "id = ?", req.GetUserId()).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, status.Errorf(codes.NotFound, "user not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to find user: %v", err)
+	}
+
+	// 开始事务
+	tx := s.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 清除用户现有的角色关联
+	if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserRole{}).Error; err != nil {
+		tx.Rollback()
+		return nil, status.Errorf(codes.Internal, "failed to clear user roles: %v", err)
+	}
+
+	// 添加新的角色关联
+	for _, roleID := range req.GetRoleIds() {
+		// 验证角色是否存在
+		var role models.Role
+		if err := tx.First(&role, "id = ?", roleID).Error; err != nil {
+			tx.Rollback()
+			if err == gorm.ErrRecordNotFound {
+				return nil, status.Errorf(codes.NotFound, "role not found: %s", roleID)
+			}
+			return nil, status.Errorf(codes.Internal, "failed to find role: %v", err)
+		}
+
+		// 创建用户角色关联
+		userRole := &models.UserRole{
+			UserID: user.ID,
+			RoleID: roleID,
+		}
+
+		if err := tx.Create(userRole).Error; err != nil {
+			tx.Rollback()
+			return nil, status.Errorf(codes.Internal, "failed to assign role: %v", err)
+		}
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to commit transaction: %v", err)
+	}
+
+	return &grpc.AssignUserRolesResponse{
+		Success: true,
+	}, nil
+}

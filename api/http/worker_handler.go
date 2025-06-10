@@ -81,7 +81,57 @@ func (h *WorkerHandler) GetWorker(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": worker})
 }
 
+// UpdateWorkerStatusRequest 更新工作节点状态请求
+type UpdateWorkerStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
 // UpdateWorkerStatus 更新工作节点状态
 func (h *WorkerHandler) UpdateWorkerStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "UpdateWorkerStatus - to be implemented"})
+	id := c.Param("id")
+
+	var req UpdateWorkerStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 验证状态值
+	validStatuses := map[string]bool{
+		"online":      true,
+		"offline":     true,
+		"busy":        true,
+		"maintenance": true,
+	}
+
+	if !validStatuses[req.Status] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的状态值"})
+		return
+	}
+
+	var worker models.Worker
+	if err := h.db.First(&worker, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "工作节点不存在"})
+			return
+		}
+		logger.WithError(err).Error("查询工作节点失败")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 更新状态
+	if err := h.db.Model(&worker).Update("status", req.Status).Error; err != nil {
+		logger.WithError(err).Error("更新工作节点状态失败")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "工作节点状态更新成功",
+		"data": gin.H{
+			"id":     id,
+			"status": req.Status,
+		},
+	})
 }

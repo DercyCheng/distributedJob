@@ -9,3 +9,8 @@ export const getWorkers = (params) => {
 export const getWorker = (id) => {
     return api.get(`/workers/${id}`)
 }
+
+// 更新工作节点状态
+export const updateWorkerStatus = (id, status) => {
+    return api.put(`/workers/${id}/status`, { status })
+}

@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"go-job/internal/models"
@@ -160,12 +161,108 @@ func (h *StatsHandler) GetJobStats(c *gin.Context) {
 
 // GetWorkerStats 获取工作节点统计
 func (h *StatsHandler) GetWorkerStats(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "GetWorkerStats - to be implemented"})
+	type WorkerStats struct {
+		TotalWorkers       int64            `json:"total_workers"`
+		OnlineWorkers      int64            `json:"online_workers"`
+		OfflineWorkers     int64            `json:"offline_workers"`
+		BusyWorkers        int64            `json:"busy_workers"`
+		WorkerList         []models.Worker  `json:"worker_list"`
+		StatusDistribution map[string]int64 `json:"status_distribution"`
+	}
+
+	stats := WorkerStats{
+		StatusDistribution: make(map[string]int64),
+	}
+
+	// 总工作节点数
+	h.db.Model(&models.Worker{}).Count(&stats.TotalWorkers)
+
+	// 在线工作节点数
+	h.db.Model(&models.Worker{}).Where("status = ?", models.WorkerStatusOnline).Count(&stats.OnlineWorkers)
+
+	// 离线工作节点数
+	h.db.Model(&models.Worker{}).Where("status = ?", models.WorkerStatusOffline).Count(&stats.OfflineWorkers)
+
+	// 忙碌工作节点数
+	h.db.Model(&models.Worker{}).Where("status = ?", models.WorkerStatusBusy).Count(&stats.BusyWorkers)
+
+	// 获取所有工作节点列表
+	h.db.Order("created_at DESC").Find(&stats.WorkerList)
+
+	// 状态分布统计
+	var statusResults []struct {
+		Status string `json:"status"`
+		Count  int64  `json:"count"`
+	}
+	h.db.Model(&models.Worker{}).Select("status, count(*) as count").Group("status").Scan(&statusResults)
+	for _, result := range statusResults {
+		stats.StatusDistribution[result.Status] = result.Count
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
 
 // GetExecutionStats 获取执行统计
 func (h *StatsHandler) GetExecutionStats(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "GetExecutionStats - to be implemented"})
+	days := c.DefaultQuery("days", "7")
+	daysInt := 7
+	if d, err := strconv.Atoi(days); err == nil && d > 0 {
+		daysInt = d
+	}
+
+	type ExecutionStats struct {
+		TotalExecutions    int64                  `json:"total_executions"`
+		SuccessExecutions  int64                  `json:"success_executions"`
+		FailedExecutions   int64                  `json:"failed_executions"`
+		RunningExecutions  int64                  `json:"running_executions"`
+		PendingExecutions  int64                  `json:"pending_executions"`
+		SuccessRate        float64                `json:"success_rate"`
+		DailyStats         []ExecutionStatsByDate `json:"daily_stats"`
+		StatusDistribution map[string]int64       `json:"status_distribution"`
+		RecentExecutions   []models.JobExecution  `json:"recent_executions"`
+	}
+
+	stats := ExecutionStats{
+		StatusDistribution: make(map[string]int64),
+	}
+
+	// 总执行数
+	h.db.Model(&models.JobExecution{}).Count(&stats.TotalExecutions)
+
+	// 成功执行数
+	h.db.Model(&models.JobExecution{}).Where("status = ?", models.ExecutionStatusSuccess).Count(&stats.SuccessExecutions)
+
+	// 失败执行数
+	h.db.Model(&models.JobExecution{}).Where("status = ?", models.ExecutionStatusFailed).Count(&stats.FailedExecutions)
+
+	// 运行中执行数
+	h.db.Model(&models.JobExecution{}).Where("status = ?", models.ExecutionStatusRunning).Count(&stats.RunningExecutions)
+
+	// 等待中执行数
+	h.db.Model(&models.JobExecution{}).Where("status = ?", models.ExecutionStatusPending).Count(&stats.PendingExecutions)
+
+	// 成功率
+	if stats.TotalExecutions > 0 {
+		stats.SuccessRate = float64(stats.SuccessExecutions) / float64(stats.TotalExecutions) * 100
+	}
+
+	// 每日统计
+	stats.DailyStats = h.getExecutionStatsByDays(daysInt)
+
+	// 状态分布统计
+	var statusResults []struct {
+		Status string `json:"status"`
+		Count  int64  `json:"count"`
+	}
+	h.db.Model(&models.JobExecution{}).Select("status, count(*) as count").Group("status").Scan(&statusResults)
+	for _, result := range statusResults {
+		stats.StatusDistribution[result.Status] = result.Count
+	}
+
+	// 最近的执行记录
+	h.db.Preload("Job").Preload("Worker").Order("created_at DESC").Limit(20).Find(&stats.RecentExecutions)
+
+	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
 
 // getExecutionStatsByDays 获取最近N天的执行统计

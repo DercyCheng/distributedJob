@@ -10,6 +10,11 @@ RUN apk add --no-cache git ca-certificates tzdata
 # 设置时区
 ENV TZ=Asia/Shanghai
 
+# 设置 Go 代理为国内镜像源
+ENV GOPROXY=https://goproxy.cn,https://mirrors.aliyun.com/goproxy/,direct
+ENV GOSUMDB=sum.golang.google.cn
+ENV GO111MODULE=on
+
 # 复制依赖文件
 COPY go.mod go.sum ./
 

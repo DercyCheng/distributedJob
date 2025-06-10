@@ -6,6 +6,8 @@ import (
 
 	"go-job/api/grpc"
 	"go-job/internal/job"
+	"go-job/internal/models"
+	"go-job/pkg/database"
 	"go-job/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -194,5 +196,42 @@ func (h *JobHandler) TriggerJob(c *gin.Context) {
 
 // GetJobExecutions 获取任务执行记录
 func (h *JobHandler) GetJobExecutions(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "GetJobExecutions - to be implemented"})
+	jobID := c.Param("id")
+	page, _ := strconv.ParseInt(c.DefaultQuery("page", "1"), 10, 32)
+	size, _ := strconv.ParseInt(c.DefaultQuery("size", "10"), 10, 32)
+	status := c.Query("status")
+
+	// 直接查询数据库获取执行记录
+	db := database.GetDB()
+	query := db.Model(&models.JobExecution{}).Where("job_id = ?", jobID).Preload("Job").Preload("Worker")
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	// 获取总数
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		logger.WithError(err).Error("查询执行记录总数失败")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 分页查询
+	var executions []models.JobExecution
+	offset := (page - 1) * size
+	if err := query.Offset(int(offset)).Limit(int(size)).Order("created_at DESC").Find(&executions).Error; err != nil {
+		logger.WithError(err).Error("查询执行记录失败")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"executions": executions,
+			"total":      total,
+			"page":       page,
+			"size":       size,
+		},
+	})
 }

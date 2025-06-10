@@ -9,3 +9,8 @@ export const getExecutions = (params) => {
 export const getExecution = (id) => {
     return api.get(`/executions/${id}`)
 }
+
+// 取消执行记录
+export const cancelExecution = (id) => {
+    return api.post(`/executions/${id}/cancel`)
+}

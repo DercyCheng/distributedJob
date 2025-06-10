@@ -261,7 +261,7 @@ func (s *AISchedulerService) callDashScopeAPI(context, userPrompt string) (strin
 func (s *AISchedulerService) buildJobAnalysisContext(job *models.Job, executions []models.JobExecution, additionalContext string) string {
 	var context strings.Builder
 
-	context.WriteString(fmt.Sprintf("任务信息：\n"))
+	context.WriteString("任务信息：\n")
 	context.WriteString(fmt.Sprintf("- 名称：%s\n", job.Name))
 	context.WriteString(fmt.Sprintf("- 描述：%s\n", job.Description))
 	context.WriteString(fmt.Sprintf("- Cron表达式：%s\n", job.Cron))
@@ -293,11 +293,10 @@ func (s *AISchedulerService) buildJobAnalysisContext(job *models.Job, executions
 			failCount++
 		}
 	}
-
 	if len(executions) > 0 {
 		successRate := float64(successCount) / float64(len(executions)) * 100
 		avgDuration := totalDuration / time.Duration(len(executions))
-		context.WriteString(fmt.Sprintf("\n统计信息：\n"))
+		context.WriteString("\n统计信息：\n")
 		context.WriteString(fmt.Sprintf("- 成功率：%.2f%%\n", successRate))
 		context.WriteString(fmt.Sprintf("- 平均执行时间：%s\n", avgDuration))
 		context.WriteString(fmt.Sprintf("- 失败次数：%d\n", failCount))
@@ -317,12 +316,11 @@ func (s *AISchedulerService) buildSystemContext() string {
 	var totalJobs, activeJobs int64
 	s.db.Model(&models.Job{}).Count(&totalJobs)
 	s.db.Model(&models.Job{}).Where("enabled = ?", true).Count(&activeJobs)
-
 	var totalWorkers, onlineWorkers int64
 	s.db.Model(&models.Worker{}).Count(&totalWorkers)
 	s.db.Model(&models.Worker{}).Where("status = ?", models.WorkerStatusOnline).Count(&onlineWorkers)
 
-	context.WriteString(fmt.Sprintf("系统状态：\n"))
+	context.WriteString("系统状态：\n")
 	context.WriteString(fmt.Sprintf("- 总任务数：%d\n", totalJobs))
 	context.WriteString(fmt.Sprintf("- 活跃任务数：%d\n", activeJobs))
 	context.WriteString(fmt.Sprintf("- 总工作节点：%d\n", totalWorkers))
@@ -365,19 +363,19 @@ func (s *AISchedulerService) buildOptimizationPrompt(jobs []models.Job, goal, sy
 	return prompt.String()
 }
 
-func (s *AISchedulerService) buildPerformanceRecommendationPrompt(context map[string]string) string {
+func (s *AISchedulerService) buildPerformanceRecommendationPrompt(_ map[string]string) string {
 	return "请基于系统性能数据，提供性能优化建议。"
 }
 
-func (s *AISchedulerService) buildReliabilityRecommendationPrompt(context map[string]string) string {
+func (s *AISchedulerService) buildReliabilityRecommendationPrompt(_ map[string]string) string {
 	return "请基于系统可靠性数据，提供可靠性改进建议。"
 }
 
-func (s *AISchedulerService) buildCostRecommendationPrompt(context map[string]string) string {
+func (s *AISchedulerService) buildCostRecommendationPrompt(_ map[string]string) string {
 	return "请基于系统资源使用情况，提供成本优化建议。"
 }
 
-func (s *AISchedulerService) buildGeneralRecommendationPrompt(context map[string]string) string {
+func (s *AISchedulerService) buildGeneralRecommendationPrompt(_ map[string]string) string {
 	return "请基于系统整体状况，提供综合优化建议。"
 }
 
@@ -424,7 +422,7 @@ func (s *AISchedulerService) extractRecommendations(aiResponse string) []string 
 	return recommendations
 }
 
-func (s *AISchedulerService) parseOptimizationResponse(aiResponse string, jobs []models.Job) []*grpc.ScheduleOptimization {
+func (s *AISchedulerService) parseOptimizationResponse(_ string, jobs []models.Job) []*grpc.ScheduleOptimization {
 	var optimizations []*grpc.ScheduleOptimization
 
 	// 为每个任务生成一个优化建议（简化处理）

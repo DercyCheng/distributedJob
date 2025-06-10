@@ -21,7 +21,8 @@ service SchedulerService {
   rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
   rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
-  rpc ReportTaskResult(ReportTaskResultRequest) returns (ReportTaskResultResponse);
+  rpc ReportTaskResult(ReportTaskResultRequest)
+      returns (ReportTaskResultResponse);
 }
 
 // 认证服务
@@ -30,7 +31,8 @@ service AuthService {
   rpc Logout(LogoutRequest) returns (LogoutResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse);
-  rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse);
+  rpc GetUserPermissions(GetUserPermissionsRequest)
+      returns (GetUserPermissionsResponse);
 }
 
 // 用户管理服务
@@ -41,16 +43,21 @@ service UserService {
   rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
   rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+  rpc AssignUserRoles(AssignUserRolesRequest) returns (AssignUserRolesResponse);
 }
 
 // 部门管理服务
 service DepartmentService {
-  rpc CreateDepartment(CreateDepartmentRequest) returns (CreateDepartmentResponse);
+  rpc CreateDepartment(CreateDepartmentRequest)
+      returns (CreateDepartmentResponse);
   rpc GetDepartment(GetDepartmentRequest) returns (GetDepartmentResponse);
   rpc ListDepartments(ListDepartmentsRequest) returns (ListDepartmentsResponse);
-  rpc UpdateDepartment(UpdateDepartmentRequest) returns (UpdateDepartmentResponse);
-  rpc DeleteDepartment(DeleteDepartmentRequest) returns (DeleteDepartmentResponse);
-  rpc GetDepartmentTree(GetDepartmentTreeRequest) returns (GetDepartmentTreeResponse);
+  rpc UpdateDepartment(UpdateDepartmentRequest)
+      returns (UpdateDepartmentResponse);
+  rpc DeleteDepartment(DeleteDepartmentRequest)
+      returns (DeleteDepartmentResponse);
+  rpc GetDepartmentTree(GetDepartmentTreeRequest)
+      returns (GetDepartmentTreeResponse);
 }
 
 // 角色管理服务
@@ -60,24 +67,31 @@ service RoleService {
   rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
   rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse);
   rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse);
-  rpc AssignPermissions(AssignPermissionsRequest) returns (AssignPermissionsResponse);
+  rpc AssignPermissions(AssignPermissionsRequest)
+      returns (AssignPermissionsResponse);
 }
 
 // 权限管理服务
 service PermissionService {
-  rpc CreatePermission(CreatePermissionRequest) returns (CreatePermissionResponse);
+  rpc CreatePermission(CreatePermissionRequest)
+      returns (CreatePermissionResponse);
   rpc GetPermission(GetPermissionRequest) returns (GetPermissionResponse);
   rpc ListPermissions(ListPermissionsRequest) returns (ListPermissionsResponse);
-  rpc UpdatePermission(UpdatePermissionRequest) returns (UpdatePermissionResponse);
-  rpc DeletePermission(DeletePermissionRequest) returns (DeletePermissionResponse);
-  rpc GetPermissionTree(GetPermissionTreeRequest) returns (GetPermissionTreeResponse);
+  rpc UpdatePermission(UpdatePermissionRequest)
+      returns (UpdatePermissionResponse);
+  rpc DeletePermission(DeletePermissionRequest)
+      returns (DeletePermissionResponse);
+  rpc GetPermissionTree(GetPermissionTreeRequest)
+      returns (GetPermissionTreeResponse);
 }
 
 // AI 调度服务
 service AISchedulerService {
   rpc AnalyzeJob(AnalyzeJobRequest) returns (AnalyzeJobResponse);
-  rpc OptimizeSchedule(OptimizeScheduleRequest) returns (OptimizeScheduleResponse);
-  rpc GetAIRecommendations(GetAIRecommendationsRequest) returns (GetAIRecommendationsResponse);
+  rpc OptimizeSchedule(OptimizeScheduleRequest)
+      returns (OptimizeScheduleResponse);
+  rpc GetAIRecommendations(GetAIRecommendationsRequest)
+      returns (GetAIRecommendationsResponse);
 }
 
 // MCP 服务
@@ -223,18 +237,12 @@ message CreateJobRequest {
   string department_id = 9;
 }
 
-message CreateJobResponse {
-  Job job = 1;
-}
+message CreateJobResponse { Job job = 1; }
 
 // 获取任务请求
-message GetJobRequest {
-  string id = 1;
-}
+message GetJobRequest { string id = 1; }
 
-message GetJobResponse {
-  Job job = 1;
-}
+message GetJobResponse { Job job = 1; }
 
 // 任务列表请求
 message ListJobsRequest {
@@ -266,18 +274,12 @@ message UpdateJobRequest {
   string department_id = 11;
 }
 
-message UpdateJobResponse {
-  Job job = 1;
-}
+message UpdateJobResponse { Job job = 1; }
 
 // 删除任务请求
-message DeleteJobRequest {
-  string id = 1;
-}
+message DeleteJobRequest { string id = 1; }
 
-message DeleteJobResponse {
-  bool success = 1;
-}
+message DeleteJobResponse { bool success = 1; }
 
 // 触发任务请求
 message TriggerJobRequest {
@@ -285,9 +287,7 @@ message TriggerJobRequest {
   map<string, string> params = 2;
 }
 
-message TriggerJobResponse {
-  string execution_id = 1;
-}
+message TriggerJobResponse { string execution_id = 1; }
 
 // 注册工作节点请求
 message RegisterWorkerRequest {
@@ -298,9 +298,7 @@ message RegisterWorkerRequest {
   map<string, string> metadata = 5;
 }
 
-message RegisterWorkerResponse {
-  string worker_id = 1;
-}
+message RegisterWorkerResponse { string worker_id = 1; }
 
 // 心跳请求
 message HeartbeatRequest {
@@ -309,9 +307,7 @@ message HeartbeatRequest {
   WorkerStatus status = 3;
 }
 
-message HeartbeatResponse {
-  bool success = 1;
-}
+message HeartbeatResponse { bool success = 1; }
 
 // 获取任务请求
 message GetTaskRequest {
@@ -319,9 +315,7 @@ message GetTaskRequest {
   int32 capacity = 2;
 }
 
-message GetTaskResponse {
-  repeated Task tasks = 1;
-}
+message GetTaskResponse { repeated Task tasks = 1; }
 
 // 任务
 message Task {
@@ -345,9 +339,7 @@ message ReportTaskResultRequest {
   google.protobuf.Timestamp finished_at = 8;
 }
 
-message ReportTaskResultResponse {
-  bool success = 1;
-}
+message ReportTaskResultResponse { bool success = 1; }
 
 // 认证相关消息
 message LoginRequest {
@@ -364,17 +356,11 @@ message LoginResponse {
   repeated Permission permissions = 6;
 }
 
-message LogoutRequest {
-  string token = 1;
-}
+message LogoutRequest { string token = 1; }
 
-message LogoutResponse {
-  bool success = 1;
-}
+message LogoutResponse { bool success = 1; }
 
-message RefreshTokenRequest {
-  string refresh_token = 1;
-}
+message RefreshTokenRequest { string refresh_token = 1; }
 
 message RefreshTokenResponse {
   string access_token = 1;
@@ -382,21 +368,13 @@ message RefreshTokenResponse {
   int64 expires_in = 3;
 }
 
-message GetUserInfoRequest {
-  string user_id = 1;
-}
+message GetUserInfoRequest { string user_id = 1; }
 
-message GetUserInfoResponse {
-  User user = 1;
-}
+message GetUserInfoResponse { User user = 1; }
 
-message GetUserPermissionsRequest {
-  string user_id = 1;
-}
+message GetUserPermissionsRequest { string user_id = 1; }
 
-message GetUserPermissionsResponse {
-  repeated Permission permissions = 1;
-}
+message GetUserPermissionsResponse { repeated Permission permissions = 1; }
 
 // 用户管理消息
 message CreateUserRequest {
@@ -409,17 +387,11 @@ message CreateUserRequest {
   repeated string role_ids = 7;
 }
 
-message CreateUserResponse {
-  User user = 1;
-}
+message CreateUserResponse { User user = 1; }
 
-message GetUserRequest {
-  string id = 1;
-}
+message GetUserRequest { string id = 1; }
 
-message GetUserResponse {
-  User user = 1;
-}
+message GetUserResponse { User user = 1; }
 
 message ListUsersRequest {
   int32 page = 1;
@@ -445,17 +417,11 @@ message UpdateUserRequest {
   repeated string role_ids = 8;
 }
 
-message UpdateUserResponse {
-  User user = 1;
-}
+message UpdateUserResponse { User user = 1; }
 
-message DeleteUserRequest {
-  string id = 1;
-}
+message DeleteUserRequest { string id = 1; }
 
-message DeleteUserResponse {
-  bool success = 1;
-}
+message DeleteUserResponse { bool success = 1; }
 
 message ChangePasswordRequest {
   string user_id = 1;
@@ -463,9 +429,14 @@ message ChangePasswordRequest {
   string new_password = 3;
 }
 
-message ChangePasswordResponse {
-  bool success = 1;
+message ChangePasswordResponse { bool success = 1; }
+
+message AssignUserRolesRequest {
+  string user_id = 1;
+  repeated string role_ids = 2;
 }
+
+message AssignUserRolesResponse { bool success = 1; }
 
 // 部门管理消息
 message CreateDepartmentRequest {
@@ -476,17 +447,11 @@ message CreateDepartmentRequest {
   int32 sort = 5;
 }
 
-message CreateDepartmentResponse {
-  Department department = 1;
-}
+message CreateDepartmentResponse { Department department = 1; }
 
-message GetDepartmentRequest {
-  string id = 1;
-}
+message GetDepartmentRequest { string id = 1; }
 
-message GetDepartmentResponse {
-  Department department = 1;
-}
+message GetDepartmentResponse { Department department = 1; }
 
 message ListDepartmentsRequest {
   int32 page = 1;
@@ -510,25 +475,15 @@ message UpdateDepartmentRequest {
   int32 sort = 7;
 }
 
-message UpdateDepartmentResponse {
-  Department department = 1;
-}
+message UpdateDepartmentResponse { Department department = 1; }
 
-message DeleteDepartmentRequest {
-  string id = 1;
-}
+message DeleteDepartmentRequest { string id = 1; }
 
-message DeleteDepartmentResponse {
-  bool success = 1;
-}
+message DeleteDepartmentResponse { bool success = 1; }
 
-message GetDepartmentTreeRequest {
-  string parent_id = 1;
-}
+message GetDepartmentTreeRequest { string parent_id = 1; }
 
-message GetDepartmentTreeResponse {
-  repeated Department departments = 1;
-}
+message GetDepartmentTreeResponse { repeated Department departments = 1; }
 
 // 角色管理消息
 message CreateRoleRequest {
@@ -538,17 +493,11 @@ message CreateRoleRequest {
   repeated string permission_ids = 4;
 }
 
-message CreateRoleResponse {
-  Role role = 1;
-}
+message CreateRoleResponse { Role role = 1; }
 
-message GetRoleRequest {
-  string id = 1;
-}
+message GetRoleRequest { string id = 1; }
 
-message GetRoleResponse {
-  Role role = 1;
-}
+message GetRoleResponse { Role role = 1; }
 
 message ListRolesRequest {
   int32 page = 1;
@@ -570,26 +519,18 @@ message UpdateRoleRequest {
   string status = 5;
 }
 
-message UpdateRoleResponse {
-  Role role = 1;
-}
+message UpdateRoleResponse { Role role = 1; }
 
-message DeleteRoleRequest {
-  string id = 1;
-}
+message DeleteRoleRequest { string id = 1; }
 
-message DeleteRoleResponse {
-  bool success = 1;
-}
+message DeleteRoleResponse { bool success = 1; }
 
 message AssignPermissionsRequest {
   string role_id = 1;
   repeated string permission_ids = 2;
 }
 
-message AssignPermissionsResponse {
-  bool success = 1;
-}
+message AssignPermissionsResponse { bool success = 1; }
 
 // 权限管理消息
 message CreatePermissionRequest {
@@ -604,17 +545,11 @@ message CreatePermissionRequest {
   int32 sort = 9;
 }
 
-message CreatePermissionResponse {
-  Permission permission = 1;
-}
+message CreatePermissionResponse { Permission permission = 1; }
 
-message GetPermissionRequest {
-  string id = 1;
-}
+message GetPermissionRequest { string id = 1; }
 
-message GetPermissionResponse {
-  Permission permission = 1;
-}
+message GetPermissionResponse { Permission permission = 1; }
 
 message ListPermissionsRequest {
   int32 page = 1;
@@ -643,25 +578,15 @@ message UpdatePermissionRequest {
   string status = 11;
 }
 
-message UpdatePermissionResponse {
-  Permission permission = 1;
-}
+message UpdatePermissionResponse { Permission permission = 1; }
 
-message DeletePermissionRequest {
-  string id = 1;
-}
+message DeletePermissionRequest { string id = 1; }
 
-message DeletePermissionResponse {
-  bool success = 1;
-}
+message DeletePermissionResponse { bool success = 1; }
 
-message GetPermissionTreeRequest {
-  string parent_id = 1;
-}
+message GetPermissionTreeRequest { string parent_id = 1; }
 
-message GetPermissionTreeResponse {
-  repeated Permission permissions = 1;
-}
+message GetPermissionTreeResponse { repeated Permission permissions = 1; }
 
 // AI 调度消息
 message AnalyzeJobRequest {
@@ -713,13 +638,9 @@ message AIRecommendation {
 }
 
 // MCP 消息
-message ListToolsRequest {
-  string category = 1;
-}
+message ListToolsRequest { string category = 1; }
 
-message ListToolsResponse {
-  repeated MCPTool tools = 1;
-}
+message ListToolsResponse { repeated MCPTool tools = 1; }
 
 message MCPTool {
   string name = 1;
@@ -744,9 +665,7 @@ message GetResourcesRequest {
   string filter = 2;
 }
 
-message GetResourcesResponse {
-  repeated MCPResource resources = 1;
-}
+message GetResourcesResponse { repeated MCPResource resources = 1; }
 
 message MCPResource {
   string uri = 1;

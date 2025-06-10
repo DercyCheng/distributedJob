@@ -195,7 +195,7 @@ func (s *MCPService) GetResources(ctx context.Context, req *grpc.GetResourcesReq
 	}, nil
 }
 
-func (s *MCPService) handleListJobs(ctx context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
+func (s *MCPService) handleListJobs(_ context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
 	var jobs []models.Job
 	query := s.db.Model(&models.Job{})
 
@@ -230,7 +230,7 @@ func (s *MCPService) handleListJobs(ctx context.Context, arguments map[string]st
 	}, nil
 }
 
-func (s *MCPService) handleCreateJob(ctx context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
+func (s *MCPService) handleCreateJob(_ context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
 	name := arguments["name"]
 	if name == "" {
 		return &grpc.CallToolResponse{
@@ -405,7 +405,7 @@ func (s *MCPService) handleGetSystemStatus(ctx context.Context, arguments map[st
 	}, nil
 }
 
-func (s *MCPService) handlePredictResourceUsage(ctx context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
+func (s *MCPService) handlePredictResourceUsage(_ context.Context, _ map[string]string) (*grpc.CallToolResponse, error) {
 	// 这里应该实现真正的预测逻辑，可能需要调用AI服务
 	prediction := map[string]interface{}{
 		"prediction_type": "resource_usage",
@@ -462,7 +462,7 @@ func (s *MCPService) handleGetJobRecommendations(ctx context.Context, arguments 
 	}, nil
 }
 
-func (s *MCPService) handleScheduleMaintenance(ctx context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
+func (s *MCPService) handleScheduleMaintenance(_ context.Context, arguments map[string]string) (*grpc.CallToolResponse, error) {
 	startTime := arguments["start_time"]
 	if startTime == "" {
 		return &grpc.CallToolResponse{

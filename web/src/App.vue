@@ -4,16 +4,20 @@
       <!-- 侧边栏 -->
       <el-aside width="250px" class="sidebar">
         <div class="logo">
-          <h2>Go Job</h2>
-          <p>分布式任务调度系统</p>
+          <el-icon size="32" color="#fff"><Timer /></el-icon>
+          <div class="logo-text">
+            <h2>Go Job</h2>
+            <p>分布式任务调度系统</p>
+          </div>
         </div>
         <el-menu
           :default-active="$route.path"
           router
           class="sidebar-menu"
           background-color="#2c3e50"
-          text-color="#ecf0f1"
+          text-color="#bdc3c7"
           active-text-color="#3498db"
+          unique-opened
         >
           <el-menu-item index="/dashboard">
             <el-icon><HomeFilled /></el-icon>
@@ -42,26 +46,34 @@
       <el-container>
         <!-- 头部 -->
         <el-header class="header">
-          <div class="header-content">
-            <div class="breadcrumb">
-              <el-breadcrumb separator="/">
-                <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
-                <el-breadcrumb-item>{{ currentPageTitle }}</el-breadcrumb-item>
-              </el-breadcrumb>
-            </div>
+          <div class="header-left">
+            <h2>{{ currentPageTitle }}</h2>
+          </div>
+          <div class="header-right">
             <div class="header-actions">
-              <el-badge :value="12" class="notification">
-                <el-icon size="20"><Bell /></el-icon>
-              </el-badge>
-              <el-dropdown>
+              <el-button type="primary" size="default" @click="handleNotifications">
+                <el-icon><Bell /></el-icon>
+                通知
+              </el-button>
+              
+              <el-dropdown @command="handleUserAction">
                 <span class="user-info">
-                  <el-icon><User /></el-icon>
-                  <span>管理员</span>
+                  <el-avatar :src="userAvatar" size="small">
+                    <el-icon><User /></el-icon>
+                  </el-avatar>
+                  <span class="username">管理员</span>
+                  <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
                 </span>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item>个人设置</el-dropdown-item>
-                    <el-dropdown-item divided>退出登录</el-dropdown-item>
+                    <el-dropdown-item command="profile">
+                      <el-icon><User /></el-icon>
+                      个人设置
+                    </el-dropdown-item>
+                    <el-dropdown-item command="settings">
+                      <el-icon><Setting /></el-icon>
+                      系统设置
+                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -80,9 +92,17 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { 
+  Timer, HomeFilled, List, Monitor, Document,
+  Bell, User, ArrowDown, Setting
+} from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
+
+const userAvatar = ''
 
 const currentPageTitle = computed(() => {
   const titleMap = {
@@ -90,10 +110,24 @@ const currentPageTitle = computed(() => {
     '/jobs': '任务管理',
     '/executions': '执行记录',
     '/workers': '工作节点',
-    '/logs': '日志查看'
+    '/logs': '日志查看',
+    '/profile': '个人设置'
   }
   return titleMap[route.path] || '未知页面'
 })
+
+const handleNotifications = () => {
+  ElMessage.info('通知功能待开发')
+}
+
+const handleUserAction = (command) => {
+  if (command === 'profile') {
+    router.push('/profile')
+    ElMessage.success('跳转到个人设置页面')
+  } else if (command === 'settings') {
+    ElMessage.info('系统设置功能待开发')
+  }
+}
 </script>
 
 <style scoped>
@@ -109,42 +143,62 @@ const currentPageTitle = computed(() => {
 
 .logo {
   padding: 20px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: #ecf0f1;
   border-bottom: 1px solid #34495e;
 }
 
-.logo h2 {
+.logo-text h2 {
   margin: 0 0 5px 0;
   font-size: 24px;
   font-weight: bold;
+  color: #fff;
 }
 
-.logo p {
+.logo-text p {
   margin: 0;
   font-size: 12px;
   opacity: 0.8;
+  color: #bdc3c7;
 }
 
 .sidebar-menu {
   border: none;
 }
 
+.sidebar-menu .el-menu-item {
+  border-radius: 8px;
+  margin: 4px 8px;
+  transition: all 0.3s ease;
+}
+
+.sidebar-menu .el-menu-item:hover {
+  background-color: #34495e !important;
+  transform: translateX(4px);
+}
+
+.sidebar-menu .el-menu-item.is-active {
+  background-color: #3498db !important;
+  color: #fff !important;
+}
+
 .header {
   background-color: #fff;
   border-bottom: 1px solid #e4e7ed;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 100%;
+  padding: 0 20px;
 }
 
-.breadcrumb {
-  flex: 1;
+.header-left h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .header-actions {
@@ -153,22 +207,28 @@ const currentPageTitle = computed(() => {
   gap: 20px;
 }
 
-.notification {
-  cursor: pointer;
-}
-
 .user-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   cursor: pointer;
-  padding: 8px;
-  border-radius: 4px;
-  transition: background-color 0.3s;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
 }
 
 .user-info:hover {
   background-color: #f5f7fa;
+}
+
+.username {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.dropdown-icon {
+  font-size: 12px;
+  transition: transform 0.3s ease;
 }
 
 .main-content {

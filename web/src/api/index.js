@@ -10,8 +10,11 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
     config => {
-        // 可以在这里添加认证 token
-        // config.headers.Authorization = `Bearer ${getToken()}`
+        // 添加认证token
+        const token = localStorage.getItem('token')
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`
+        }
         return config
     },
     error => {
@@ -26,7 +29,19 @@ api.interceptors.response.use(
     },
     error => {
         const message = error.response?.data?.error || error.message || '请求失败'
-        ElMessage.error(message)
+
+        // 处理401未授权错误
+        if (error.response?.status === 401) {
+            // 清除本地存储的token
+            localStorage.removeItem('token')
+            // 如果不是登录页面，跳转到登录页面
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login'
+            }
+        } else {
+            ElMessage.error(message)
+        }
+
         return Promise.reject(error)
     }
 )

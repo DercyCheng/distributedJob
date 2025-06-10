@@ -151,7 +151,29 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 }
 
 func (h *UserHandler) AssignUserRoles(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "AssignUserRoles - to be implemented"})
+	id := c.Param("id")
+
+	var req struct {
+		RoleIDs []string `json:"role_ids" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	grpcReq := &grpc.AssignUserRolesRequest{
+		UserId:  id,
+		RoleIds: req.RoleIDs,
+	}
+
+	_, err := h.service.AssignUserRoles(c.Request.Context(), grpcReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "用户角色分配成功"})
 }
 
 // RoleHandler 角色处理器

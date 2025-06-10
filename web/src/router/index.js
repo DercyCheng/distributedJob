@@ -4,6 +4,7 @@ import Jobs from '@/views/Jobs.vue'
 import Executions from '@/views/Executions.vue'
 import Workers from '@/views/Workers.vue'
 import Logs from '@/views/Logs.vue'
+import Profile from '@/views/Profile.vue'
 
 const routes = [
     {
@@ -34,6 +35,11 @@ const routes = [
         path: '/logs',
         name: 'Logs',
         component: Logs
+    },
+    {
+        path: '/profile',
+        name: 'Profile',
+        component: Profile
     }
 ]
 

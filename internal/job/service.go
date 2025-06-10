@@ -8,6 +8,8 @@ import (
 	"go-job/internal/models"
 	"go-job/pkg/database"
 	"go-job/pkg/logger"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,7 +52,7 @@ func (s *Service) CreateJob(ctx context.Context, req *grpc.CreateJobRequest) (*g
 		Enabled:       true,
 		RetryAttempts: int(req.GetRetryAttempts()),
 		Timeout:       int(req.GetTimeout()),
-		CreatedBy:     "system", // TODO: 从上下文获取用户信息
+		CreatedBy:     getUserFromContext(ctx), // 从上下文获取用户信息
 	}
 
 	if err := s.db.Create(job).Error; err != nil {
@@ -279,11 +281,181 @@ func (s *Service) modelToGrpc(job *models.Job) *grpc.Job {
 
 // validateCron 验证 Cron 表达式
 func validateCron(cronExpr string) error {
-	// 这里可以使用 cron 库验证表达式
-	// 简单验证，实际项目中应该使用更严格的验证
+	// 详细的 Cron 表达式验证
 	if cronExpr == "" {
-		return fmt.Errorf("Cron 表达式不能为空")
+		return fmt.Errorf("cron 表达式不能为空")
 	}
-	// TODO: 添加更详细的 Cron 表达式验证
+
+	// 使用 cron 库验证表达式
+	// 支持标准的 5 字段格式: 分 时 日 月 周
+	// 也支持扩展的 6 字段格式: 秒 分 时 日 月 周
+	fields := strings.Fields(cronExpr)
+
+	// 检查字段数量
+	if len(fields) != 5 && len(fields) != 6 {
+		return fmt.Errorf("cron 表达式必须包含 5 或 6 个字段，当前有 %d 个字段", len(fields))
+	}
+
+	// 基本字段验证
+	for i, field := range fields {
+		if strings.TrimSpace(field) == "" {
+			return fmt.Errorf("第 %d 个字段不能为空", i+1)
+		}
+
+		// 检查特殊字符
+		if !isValidCronField(field) {
+			return fmt.Errorf("第 %d 个字段包含无效字符: %s", i+1, field)
+		}
+	}
+
+	// 基本范围验证
+	if len(fields) == 5 {
+		// 标准格式: 分 时 日 月 周
+		ranges := []struct {
+			min, max int
+			name     string
+		}{
+			{0, 59, "分钟"},
+			{0, 23, "小时"},
+			{1, 31, "日"},
+			{1, 12, "月"},
+			{0, 7, "周"}, // 0 和 7 都表示周日
+		}
+
+		for i, r := range ranges {
+			if err := validateCronFieldRange(fields[i], r.min, r.max, r.name); err != nil {
+				return err
+			}
+		}
+	} else {
+		// 6字段格式: 秒 分 时 日 月 周
+		ranges := []struct {
+			min, max int
+			name     string
+		}{
+			{0, 59, "秒"},
+			{0, 59, "分钟"},
+			{0, 23, "小时"},
+			{1, 31, "日"},
+			{1, 12, "月"},
+			{0, 7, "周"}, // 0 和 7 都表示周日
+		}
+
+		for i, r := range ranges {
+			if err := validateCronFieldRange(fields[i], r.min, r.max, r.name); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
+}
+
+// isValidCronField 检查字段是否包含有效的 cron 字符
+func isValidCronField(field string) bool {
+	// 允许的字符: 数字、*、?、-、,、/、L、W、#
+	validChars := "0123456789*?-,/LW#"
+	for _, char := range field {
+		found := false
+		for _, validChar := range validChars {
+			if char == validChar {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// validateCronFieldRange 验证字段的数值范围
+func validateCronFieldRange(field string, min, max int, fieldName string) error {
+	// 跳过特殊字符
+	if field == "*" || field == "?" {
+		return nil
+	}
+
+	// 处理范围表达式 (如 1-5)
+	if strings.Contains(field, "-") {
+		parts := strings.Split(field, "-")
+		if len(parts) == 2 {
+			start, err1 := strconv.Atoi(parts[0])
+			end, err2 := strconv.Atoi(parts[1])
+			if err1 != nil || err2 != nil {
+				return fmt.Errorf("%s字段范围格式错误: %s", fieldName, field)
+			}
+			if start < min || start > max || end < min || end > max {
+				return fmt.Errorf("%s字段范围超出有效范围 [%d-%d]: %s", fieldName, min, max, field)
+			}
+			if start > end {
+				return fmt.Errorf("%s字段范围开始值不能大于结束值: %s", fieldName, field)
+			}
+			return nil
+		}
+	}
+
+	// 处理列表表达式 (如 1,3,5)
+	if strings.Contains(field, ",") {
+		values := strings.Split(field, ",")
+		for _, value := range values {
+			if err := validateSingleCronValue(strings.TrimSpace(value), min, max, fieldName); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// 处理步长表达式 (如 */5 或 0-30/5)
+	if strings.Contains(field, "/") {
+		parts := strings.Split(field, "/")
+		if len(parts) == 2 {
+			step, err := strconv.Atoi(parts[1])
+			if err != nil || step <= 0 {
+				return fmt.Errorf("%s字段步长值无效: %s", fieldName, field)
+			}
+			// 验证基础部分
+			if parts[0] != "*" {
+				return validateSingleCronValue(parts[0], min, max, fieldName)
+			}
+			return nil
+		}
+	}
+
+	// 验证单个值
+	return validateSingleCronValue(field, min, max, fieldName)
+}
+
+// validateSingleCronValue 验证单个数值
+func validateSingleCronValue(value string, min, max int, fieldName string) error {
+	// 跳过特殊字符
+	if value == "*" || value == "?" || value == "L" || value == "W" {
+		return nil
+	}
+
+	// 处理包含特殊字符的值 (如 L, W, #)
+	if strings.Contains(value, "L") || strings.Contains(value, "W") || strings.Contains(value, "#") {
+		// 这些特殊字符的验证比较复杂，这里只做基本检查
+		return nil
+	}
+
+	num, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("%s字段包含非数字值: %s", fieldName, value)
+	}
+
+	if num < min || num > max {
+		return fmt.Errorf("%s字段值超出有效范围 [%d-%d]: %d", fieldName, min, max, num)
+	}
+
+	return nil
+}
+
+// getUserFromContext 从上下文获取用户信息
+func getUserFromContext(ctx context.Context) string {
+	if userID, ok := ctx.Value("user_id").(string); ok && userID != "" {
+		return userID
+	}
+	return "system"
 }

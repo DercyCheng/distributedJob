@@ -171,6 +171,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, VideoPlay, Edit, Delete } from '@element-plus/icons-vue'
 import { getJobs, createJob, updateJob, deleteJob as deleteJobApi, triggerJob as triggerJobApi } from '@/api/jobs'
 
 const jobs = ref([])
@@ -358,42 +359,190 @@ const formatTime = (time) => {
 
 <style scoped>
 .jobs {
-  padding: 20px;
+  padding: 24px;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 24px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.page-header h1 {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
 }
 
 .search-card {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.search-card :deep(.el-card__body) {
+  padding: 24px;
+}
+
+.jobs :deep(.el-card) {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.jobs :deep(.el-card__body) {
+  padding: 24px;
+}
+
+.jobs :deep(.el-table) {
+  background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.jobs :deep(.el-table__header) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.jobs :deep(.el-table__header th) {
+  background: transparent;
+  color: white;
+  font-weight: 600;
+  border: none;
+  padding: 16px 12px;
+}
+
+.jobs :deep(.el-table__body tr) {
+  transition: all 0.3s ease;
+}
+
+.jobs :deep(.el-table__body tr:hover) {
+  background: rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.jobs :deep(.el-table__body td) {
+  border: none;
+  padding: 16px 12px;
+}
+
+.jobs :deep(.el-button) {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.jobs :deep(.el-button:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.jobs :deep(.el-button--primary) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+.jobs :deep(.el-button--danger) {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  border: none;
+}
+
+.jobs :deep(.el-switch.is-checked .el-switch__core) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
 }
 
 .pagination {
-  margin-top: 20px;
+  margin-top: 24px;
   text-align: right;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.jobs :deep(.el-pagination) {
+  justify-content: flex-end;
+}
+
+.jobs :deep(.el-pagination .el-pager li.is-active) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 6px;
+}
+
+.jobs :deep(.el-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.jobs :deep(.el-dialog__header) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 24px;
+}
+
+.jobs :deep(.el-dialog__title) {
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.jobs :deep(.el-dialog__body) {
+  padding: 24px;
+}
+
+.jobs :deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #2c3e50;
 }
 
 .form-help {
   font-size: 12px;
-  color: #999;
+  color: #67c23a;
   margin-top: 5px;
+  font-style: italic;
 }
 
 .params-editor {
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  padding: 10px;
-  background-color: #f9f9f9;
+  border: 2px solid #e1f3d8;
+  border-radius: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
 }
 
 .param-item {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .param-item:last-child {
@@ -402,6 +551,64 @@ const formatTime = (time) => {
 
 .input-suffix {
   margin-left: 10px;
-  color: #999;
+  color: #67c23a;
+  font-weight: 500;
+}
+
+.jobs :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.jobs :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.jobs :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+  border-color: #667eea;
+}
+
+.jobs :deep(.el-select .el-input__wrapper) {
+  border-radius: 8px;
+}
+
+.jobs :deep(.el-textarea__inner) {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.jobs :deep(.el-textarea__inner:hover) {
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.jobs :deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+  border-color: #667eea;
+}
+
+@media (max-width: 768px) {
+  .jobs {
+    padding: 16px;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+  
+  .page-header h1 {
+    font-size: 24px;
+  }
+  
+  .jobs :deep(.el-table) {
+    font-size: 14px;
+  }
+  
+  .jobs :deep(.el-button) {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
 }
 </style>

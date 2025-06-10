@@ -1,61 +1,87 @@
 <template>
   <div class="dashboard">
-    <h1>仪表板</h1>
+    <div class="page-header">
+      <h1>
+        <el-icon size="24"><TrendCharts /></el-icon>
+        仪表板
+      </h1>
+      <p>实时监控系统运行状态和性能指标</p>
+    </div>
     
     <!-- 统计卡片 -->
     <el-row :gutter="20" class="stats-cards">
       <el-col :span="6">
-        <el-card class="stat-card">
+        <el-card class="stat-card total-jobs" shadow="hover">
           <div class="stat-content">
-            <div class="stat-number">{{ dashboardData.totalJobs }}</div>
-            <div class="stat-label">总任务数</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ dashboardData.totalJobs }}</div>
+              <div class="stat-label">总任务数</div>
+            </div>
+            <div class="stat-icon">
+              <el-icon size="48" color="#409EFF"><Timer /></el-icon>
+            </div>
           </div>
-          <el-icon class="stat-icon" color="#409EFF"><Timer /></el-icon>
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card class="stat-card">
+        <el-card class="stat-card active-jobs" shadow="hover">
           <div class="stat-content">
-            <div class="stat-number">{{ dashboardData.activeJobs }}</div>
-            <div class="stat-label">活跃任务</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ dashboardData.activeJobs }}</div>
+              <div class="stat-label">活跃任务</div>
+            </div>
+            <div class="stat-icon">
+              <el-icon size="48" color="#67C23A"><CircleCheck /></el-icon>
+            </div>
           </div>
-          <el-icon class="stat-icon" color="#67C23A"><CircleCheck /></el-icon>
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card class="stat-card">
+        <el-card class="stat-card online-workers" shadow="hover">
           <div class="stat-content">
-            <div class="stat-number">{{ dashboardData.onlineWorkers }}/{{ dashboardData.totalWorkers }}</div>
-            <div class="stat-label">在线节点</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ dashboardData.onlineWorkers }}/{{ dashboardData.totalWorkers }}</div>
+              <div class="stat-label">在线节点</div>
+            </div>
+            <div class="stat-icon">
+              <el-icon size="48" color="#E6A23C"><Monitor /></el-icon>
+            </div>
           </div>
-          <el-icon class="stat-icon" color="#E6A23C"><Monitor /></el-icon>
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card class="stat-card">
+        <el-card class="stat-card success-rate" shadow="hover">
           <div class="stat-content">
-            <div class="stat-number">{{ dashboardData.successRate.toFixed(1) }}%</div>
-            <div class="stat-label">成功率</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ dashboardData.successRate.toFixed(1) }}%</div>
+              <div class="stat-label">成功率</div>
+            </div>
+            <div class="stat-icon">
+              <el-icon size="48" color="#F56C6C"><TrendCharts /></el-icon>
+            </div>
           </div>
-          <el-icon class="stat-icon" color="#F56C6C"><TrendCharts /></el-icon>
         </el-card>
       </el-col>
-    </el-row>
-
-    <!-- 图表区域 -->
+    </el-row>    <!-- 图表区域 -->
     <el-row :gutter="20" class="charts-row">
       <el-col :span="12">
-        <el-card>
+        <el-card shadow="hover" class="chart-card">
           <template #header>
-            <span>执行趋势</span>
+            <div class="card-header">
+              <el-icon><TrendCharts /></el-icon>
+              <span>执行趋势</span>
+            </div>
           </template>
           <div id="execution-chart" style="height: 300px;"></div>
         </el-card>
       </el-col>
       <el-col :span="12">
-        <el-card>
+        <el-card shadow="hover" class="chart-card">
           <template #header>
-            <span>任务状态分布</span>
+            <div class="card-header">
+              <el-icon><PieChart /></el-icon>
+              <span>任务状态分布</span>
+            </div>
           </template>
           <div id="status-chart" style="height: 300px;"></div>
         </el-card>
@@ -63,18 +89,21 @@
     </el-row>
 
     <!-- 最近任务和执行记录 -->
-    <el-row :gutter="20">
+    <el-row :gutter="20" class="tables-row">
       <el-col :span="12">
-        <el-card>
+        <el-card shadow="hover" class="table-card">
           <template #header>
-            <span>最近任务</span>
+            <div class="card-header">
+              <el-icon><Timer /></el-icon>
+              <span>最近任务</span>
+            </div>
           </template>
-          <el-table :data="dashboardData.recentJobs" stripe>
-            <el-table-column prop="name" label="任务名称" />
-            <el-table-column prop="cron" label="调度规则" />
-            <el-table-column prop="enabled" label="状态">
+          <el-table :data="dashboardData.recentJobs" stripe class="dashboard-table">
+            <el-table-column prop="name" label="任务名称" show-overflow-tooltip />
+            <el-table-column prop="cron" label="调度规则" width="120" />
+            <el-table-column prop="enabled" label="状态" width="80" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.enabled ? 'success' : 'danger'">
+                <el-tag :type="row.enabled ? 'success' : 'danger'" size="small">
                   {{ row.enabled ? '启用' : '禁用' }}
                 </el-tag>
               </template>
@@ -83,20 +112,23 @@
         </el-card>
       </el-col>
       <el-col :span="12">
-        <el-card>
+        <el-card shadow="hover" class="table-card">
           <template #header>
-            <span>最近执行</span>
+            <div class="card-header">
+              <el-icon><List /></el-icon>
+              <span>最近执行</span>
+            </div>
           </template>
-          <el-table :data="dashboardData.recentExecutions" stripe>
-            <el-table-column prop="job.name" label="任务名称" />
-            <el-table-column prop="status" label="状态">
+          <el-table :data="dashboardData.recentExecutions" stripe class="dashboard-table">
+            <el-table-column prop="job.name" label="任务名称" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="80" align="center">
               <template #default="{ row }">
-                <el-tag :type="getStatusType(row.status)">
+                <el-tag :type="getStatusType(row.status)" size="small">
                   {{ getStatusText(row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="执行时间">
+            <el-table-column prop="created_at" label="执行时间" width="120">
               <template #default="{ row }">
                 {{ formatTime(row.created_at) }}
               </template>
@@ -241,47 +273,142 @@ const formatTime = (time) => {
 
 <style scoped>
 .dashboard {
-  padding: 20px;
+  padding: 0;
+}
+
+.page-header {
+  margin-bottom: 24px;
+  padding: 24px 0;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.page-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-header p {
+  margin: 0;
+  color: #666;
+  font-size: 16px;
 }
 
 .stats-cards {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
-  .stat-content {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .stat-number {
-    font-size: 28px;
-    font-weight: bold;
-    color: #333;
-    margin-bottom: 5px;
-  }
-  
-  .stat-label {
-    font-size: 14px;
-    color: #666;
-  }
-  
-  .stat-icon {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 32px;
-  }
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  border: none;
+  overflow: hidden;
 }
 
-.el-card {
-  position: relative;
-  margin-bottom: 20px;
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.total-jobs {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.active-jobs {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.online-workers {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  color: white;
+}
+
+.success-rate {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  color: white;
+}
+
+.stat-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-number {
+  font-size: 32px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 14px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.stat-icon {
+  opacity: 0.3;
 }
 
 .charts-row {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
-</style>
+
+.tables-row {
+  margin-bottom: 24px;
+}
+
+.chart-card,
+.table-card {
+  border-radius: 12px;
+  border: none;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.dashboard-table {
+  border-radius: 8px;
+}
+
+.dashboard-table .el-table__header {
+  background-color: #f8f9fa;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .stat-card .stat-number {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 24px;
+  }
+  
+  .stat-card .stat-number {
+    font-size: 24px;
+  }
+  
+  .stat-card .stat-label {
+    font-size: 12px;
+  }
+}</style>
