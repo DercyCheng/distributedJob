@@ -60,6 +60,13 @@ func NewWorker(cfg *config.Config) *Worker {
 	}
 }
 
+// SetName 设置工作节点名称
+func (w *Worker) SetName(name string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.name = name
+}
+
 // Start 启动工作节点
 func (w *Worker) Start(ctx context.Context) error {
 	logger.Info("启动工作节点")

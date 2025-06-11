@@ -84,6 +84,7 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
+import wsClient from '@/utils/websocket'
 
 const logs = ref([])
 const autoScroll = ref(true)
@@ -94,40 +95,6 @@ const filterForm = reactive({
   service: '',
   keyword: ''
 })
-
-// 模拟实时日志数据
-const mockLogs = [
-  {
-    time: new Date(),
-    level: 'info',
-    service: 'scheduler',
-    message: '调度器服务启动成功'
-  },
-  {
-    time: new Date(Date.now() - 1000),
-    level: 'info',
-    service: 'worker',
-    message: '工作节点注册成功: worker-001'
-  },
-  {
-    time: new Date(Date.now() - 2000),
-    level: 'debug',
-    service: 'scheduler',
-    message: '加载任务配置: 5个任务已加载'
-  },
-  {
-    time: new Date(Date.now() - 3000),
-    level: 'warn',
-    service: 'worker',
-    message: '工作节点负载较高: 90%'
-  },
-  {
-    time: new Date(Date.now() - 4000),
-    level: 'error',
-    service: 'scheduler',
-    message: '任务执行失败: job-123'
-  }
-]
 
 const filteredLogs = computed(() => {
   return logs.value.filter(log => {
@@ -144,45 +111,52 @@ const filteredLogs = computed(() => {
   })
 })
 
-let logInterval = null
-
 onMounted(() => {
-  logs.value = [...mockLogs]
-  startLogStream()
+  startRealTimeLogStream()
 })
 
 onUnmounted(() => {
-  stopLogStream()
+  stopRealTimeLogStream()
 })
 
-const startLogStream = () => {
-  // 模拟实时日志流
-  logInterval = setInterval(() => {
-    const newLog = {
-      time: new Date(),
-      level: ['debug', 'info', 'warn', 'error'][Math.floor(Math.random() * 4)],
-      service: ['scheduler', 'worker', 'web'][Math.floor(Math.random() * 3)],
-      message: `模拟日志消息 ${Date.now()}`
-    }
-    logs.value.push(newLog)
-    
-    // 限制日志数量
-    if (logs.value.length > 1000) {
-      logs.value = logs.value.slice(-800)
-    }
-    
-    if (autoScroll.value) {
-      nextTick(() => {
-        scrollToBottom()
-      })
-    }
-  }, 2000)
+const startRealTimeLogStream = () => {
+  // 连接WebSocket获取实时日志
+  wsClient.connect(`ws://${window.location.host}/ws`)
+  
+  wsClient.on('log', (logData) => {
+    addLogEntry(logData)
+  })
+
+  wsClient.on('connected', () => {
+    // 订阅日志流
+    wsClient.send({
+      type: 'subscribe',
+      channel: 'logs'
+    })
+  })
 }
 
-const stopLogStream = () => {
-  if (logInterval) {
-    clearInterval(logInterval)
-    logInterval = null
+const stopRealTimeLogStream = () => {
+  wsClient.disconnect()
+}
+
+const addLogEntry = (logData) => {
+  logs.value.push({
+    time: new Date(logData.time),
+    level: logData.level,
+    service: logData.service,
+    message: logData.message
+  })
+  
+  // 限制日志数量
+  if (logs.value.length > 1000) {
+    logs.value = logs.value.slice(-800)
+  }
+  
+  if (autoScroll.value) {
+    nextTick(() => {
+      scrollToBottom()
+    })
   }
 }
 
@@ -193,7 +167,10 @@ const scrollToBottom = () => {
 }
 
 const refreshLogs = () => {
-  logs.value = [...mockLogs]
+  // 重新连接WebSocket获取最新日志
+  stopRealTimeLogStream()
+  logs.value = []
+  startRealTimeLogStream()
 }
 
 const clearLogs = () => {

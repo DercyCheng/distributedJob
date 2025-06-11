@@ -14,10 +14,12 @@ import (
 	"go-job/internal/scheduler"
 	"go-job/internal/user"
 	"go-job/pkg/auth"
+	"go-job/pkg/broadcaster"
 	"go-job/pkg/config"
 	"go-job/pkg/database"
 	"go-job/pkg/logger"
 	"go-job/pkg/redis"
+	"go-job/pkg/websocket"
 	"log"
 	"net"
 	"net/http"
@@ -57,8 +59,20 @@ func main() {
 		logrus.Fatalf("初始化Redis失败: %v", err)
 	}
 	logrus.Info("Redis连接成功")
+
+	// 初始化默认数据
+	if err := database.InitDefaultData(); err != nil {
+		logrus.Fatalf("初始化默认数据失败: %v", err)
+	}
+	logrus.Info("默认数据初始化完成")
+
+	// 初始化WebSocket Hub
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+	logrus.Info("WebSocket Hub启动完成")
+
 	// 初始化服务
-	services, schedulerService := initServices(cfg)
+	services, schedulerService := initServices(cfg, wsHub)
 	logrus.Info("服务初始化完成")
 
 	// 创建上下文
@@ -89,6 +103,13 @@ func main() {
 		startScheduler(ctx, cfg, schedulerService)
 	}()
 
+	// 启动统计数据广播服务
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		startStatsBroadcaster(ctx, services)
+	}()
+
 	// 等待退出信号
 	waitForShutdown(cancel)
 
@@ -98,7 +119,7 @@ func main() {
 }
 
 // initServices 初始化所有服务
-func initServices(cfg *config.Config) (*httpapi.Services, *scheduler.Service) {
+func initServices(cfg *config.Config, wsHub *websocket.Hub) (*httpapi.Services, *scheduler.Service) {
 	db := database.GetDB()
 
 	// 创建JWT管理器
@@ -128,6 +149,7 @@ func initServices(cfg *config.Config) (*httpapi.Services, *scheduler.Service) {
 		JobService:        jobService,
 		AIScheduler:       aiScheduler,
 		MCPService:        mcpService,
+		WSHub:             wsHub,
 	}
 
 	return services, schedulerService
@@ -218,11 +240,18 @@ func startGRPCServer(ctx context.Context, cfg *config.Config, services *httpapi.
 }
 
 // startScheduler 启动调度器
-func startScheduler(ctx context.Context, cfg *config.Config, schedulerService *scheduler.Service) {
+func startScheduler(ctx context.Context, _ *config.Config, schedulerService *scheduler.Service) {
 	logrus.Info("启动任务调度器...")
 	if err := schedulerService.Start(ctx); err != nil {
 		logrus.Errorf("调度器启动失败: %v", err)
 	}
+}
+
+// startStatsBroadcaster 启动统计数据广播服务
+func startStatsBroadcaster(ctx context.Context, services *httpapi.Services) {
+	logrus.Info("启动统计数据广播服务...")
+	broadcaster := broadcaster.NewStatsBroadcaster(services.WSHub)
+	broadcaster.Start(ctx)
 }
 
 // waitForShutdown 等待关闭信号

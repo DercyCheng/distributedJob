@@ -136,14 +136,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getWorkers, getWorker } from '@/api/workers'
+import wsClient from '@/utils/websocket'
 
 const workers = ref([])
 const loading = ref(false)
 const showDetailDialog = ref(false)
 const currentWorker = ref(null)
+let refreshInterval = null
 
 const searchForm = reactive({
   status: ''
@@ -157,6 +159,11 @@ const pagination = reactive({
 
 onMounted(() => {
   loadWorkers()
+  startRealTimeUpdates()
+})
+
+onUnmounted(() => {
+  stopRealTimeUpdates()
 })
 
 const loadWorkers = async () => {
@@ -174,6 +181,53 @@ const loadWorkers = async () => {
     ElMessage.error('加载工作节点失败')
   } finally {
     loading.value = false
+  }
+}
+
+const startRealTimeUpdates = () => {
+  // WebSocket 实时更新
+  wsClient.connect(`ws://${window.location.host}/ws`)
+  
+  wsClient.on('worker-status', (data) => {
+    updateWorkerStatus(data)
+  })
+
+  wsClient.on('connected', () => {
+    // 订阅工作节点状态更新
+    wsClient.send({
+      type: 'subscribe',
+      channel: 'worker-status'
+    })
+  })
+
+  // 定时轮询作为备用方案
+  refreshInterval = setInterval(() => {
+    loadWorkers()
+  }, 30000) // 30秒更新一次
+}
+
+const stopRealTimeUpdates = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+  wsClient.disconnect()
+}
+
+const updateWorkerStatus = (workerData) => {
+  const index = workers.value.findIndex(w => w.id === workerData.id)
+  if (index !== -1) {
+    // 更新现有工作节点
+    workers.value[index] = { ...workers.value[index], ...workerData }
+  } else if (workerData.status !== 'offline') {
+    // 添加新的工作节点（如果不是离线状态）
+    workers.value.push(workerData)
+    pagination.total++
+  }
+  
+  // 如果当前正在查看该工作节点的详情，也要更新
+  if (currentWorker.value && currentWorker.value.id === workerData.id) {
+    currentWorker.value = { ...currentWorker.value, ...workerData }
   }
 }
 

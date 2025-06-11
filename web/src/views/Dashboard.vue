@@ -141,9 +141,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 import { getDashboardData } from '@/api/stats'
+import wsClient from '@/utils/websocket'
 
 const dashboardData = ref({
   totalJobs: 0,
@@ -156,24 +157,77 @@ const dashboardData = ref({
   executionStats: []
 })
 
+let refreshInterval = null
+let executionChart = null
+let statusChart = null
+
 onMounted(async () => {
   await loadDashboardData()
   await nextTick()
   initCharts()
+  startRealTimeUpdates()
+})
+
+onUnmounted(() => {
+  stopRealTimeUpdates()
+  if (executionChart) {
+    executionChart.dispose()
+  }
+  if (statusChart) {
+    statusChart.dispose()
+  }
 })
 
 const loadDashboardData = async () => {
   try {
     const response = await getDashboardData()
     dashboardData.value = response.data
+    updateCharts()
   } catch (error) {
     console.error('加载仪表板数据失败:', error)
   }
 }
 
+const startRealTimeUpdates = () => {
+  // WebSocket 实时更新
+  wsClient.connect(`ws://${window.location.host}/ws`)
+  
+  wsClient.on('stats', (data) => {
+    updateDashboardData(data)
+  })
+
+  wsClient.on('connected', () => {
+    // 订阅统计数据更新
+    wsClient.send({
+      type: 'subscribe',
+      channel: 'dashboard-stats'
+    })
+  })
+
+  // 定时轮询作为备用方案
+  refreshInterval = setInterval(async () => {
+    await loadDashboardData()
+    updateCharts()
+  }, 30000) // 30秒更新一次
+}
+
+const stopRealTimeUpdates = () => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+  wsClient.disconnect()
+}
+
+const updateDashboardData = (newData) => {
+  // 更新响应式数据
+  Object.assign(dashboardData.value, newData)
+  updateCharts()
+}
+
 const initCharts = () => {
   // 执行趋势图
-  const executionChart = echarts.init(document.getElementById('execution-chart'))
+  executionChart = echarts.init(document.getElementById('execution-chart'))
   const executionOption = {
     tooltip: {
       trigger: 'axis'
@@ -212,7 +266,7 @@ const initCharts = () => {
   executionChart.setOption(executionOption)
 
   // 状态分布饼图
-  const statusChart = echarts.init(document.getElementById('status-chart'))
+  statusChart = echarts.init(document.getElementById('status-chart'))
   const totalSuccess = dashboardData.value.executionStats.reduce((sum, item) => sum + item.success, 0)
   const totalFailed = dashboardData.value.executionStats.reduce((sum, item) => sum + item.failed, 0)
   
@@ -244,6 +298,29 @@ const initCharts = () => {
     ]
   }
   statusChart.setOption(statusOption)
+}
+
+const updateCharts = () => {
+  if (executionChart && statusChart) {
+    // 更新执行趋势图
+    const executionOption = executionChart.getOption()
+    executionOption.xAxis[0].data = dashboardData.value.executionStats.map(item => item.date)
+    executionOption.series[0].data = dashboardData.value.executionStats.map(item => item.success)
+    executionOption.series[1].data = dashboardData.value.executionStats.map(item => item.failed)
+    executionOption.series[2].data = dashboardData.value.executionStats.map(item => item.total)
+    executionChart.setOption(executionOption)
+
+    // 更新状态分布饼图
+    const totalSuccess = dashboardData.value.executionStats.reduce((sum, item) => sum + item.success, 0)
+    const totalFailed = dashboardData.value.executionStats.reduce((sum, item) => sum + item.failed, 0)
+    
+    const statusOption = statusChart.getOption()
+    statusOption.series[0].data = [
+      { value: totalSuccess, name: '成功', itemStyle: { color: '#67C23A' } },
+      { value: totalFailed, name: '失败', itemStyle: { color: '#F56C6C' } }
+    ]
+    statusChart.setOption(statusOption)
+  }
 }
 
 const getStatusType = (status) => {

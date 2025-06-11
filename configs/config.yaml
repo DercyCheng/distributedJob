@@ -40,10 +40,12 @@ scheduler:
   # AI调度配置
   ai:
     enabled: true
-    dashscopeApiKey: "sk-nlorxhdzgcgskdexntrhkleffwdwbwecsuvunqxkpdrclyjo"
-    model: "qwen-max"
+    dashscopeApiKey: "${DASHSCOPE_API_KEY:-sk-default-key}"
+    model: "${AI_MODEL:-qwen-max}"
     temperature: 0.7
     maxTokens: 2000
+    timeout: 30000 # 30秒超时
+    maxRetries: 3
 
 # 日志配置
 logger:
